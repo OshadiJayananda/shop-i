@@ -46,4 +46,6 @@ app.*.map.json
 */flutter/generated_plugin_registrant.*
 
 # Ignore generated CMake files for Flutter across different platforms
-*/flutter/generated_plugins.cmake
+*/flutter/generated_plugins.*
+
+*/Flutter/GeneratedPluginRegistrant.swift
