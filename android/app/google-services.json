@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "188807963971",
+    "firebase_url": "https://shop-i-de05b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "shop-i-de05b",
+    "storage_bucket": "shop-i-de05b.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:188807963971:android:a76dede7f0a237a93a3bf6",
+        "android_client_info": {
+          "package_name": "com.example.demo_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAK2unpOUTUcNZnyxbwrY-6M4ew2hhDm54"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
