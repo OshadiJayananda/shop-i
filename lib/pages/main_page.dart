@@ -2,6 +2,7 @@ import 'package:demo_app/pages/home_page.dart';
 import 'package:demo_app/pages/profile_page.dart';
 import 'package:demo_app/pages/settings_page.dart';
 import 'package:demo_app/pages/shopping_page.dart';
+import 'package:demo_app/pages/camera_page.dart';
 import 'package:flutter/material.dart';
 
 class MainPage extends StatefulWidget {
@@ -13,6 +14,7 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   final List<Widget> pages = [
+    const CameraPage(),
     const HomePage(),
     const ShoppingPage(),
     const ProfilePage(),
@@ -32,9 +34,15 @@ class _MainPageState extends State<MainPage> {
             currentPage = value;
           });
         },
-        selectedItemColor: Colors.black,  // For selected item color
+        selectedItemColor: Colors.black, // For selected item color
         unselectedItemColor: Colors.grey,
         items: const [
+          BottomNavigationBarItem(
+            icon: Icon(
+              Icons.camera,
+            ),
+            label: "Camera",
+          ),
           BottomNavigationBarItem(
             icon: Icon(
               Icons.home,
@@ -53,7 +61,7 @@ class _MainPageState extends State<MainPage> {
             ),
             label: "Profile",
           ),
-           BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(
               Icons.settings,
             ),
