@@ -45,7 +45,6 @@ class _ShoppingPageState extends State<ShoppingPage> {
     });
   }
 
-  // Function to handle adding items to cart with an initial quantity of 1
   void _addToCart(String itemName, [int quantity = 1]) {
     setState(() {
       cartItems[itemName] = cartItems.containsKey(itemName)
@@ -55,14 +54,12 @@ class _ShoppingPageState extends State<ShoppingPage> {
     });
   }
 
-  // Function to increase quantity of an item in the cart
   void _increaseQuantity(String itemName) {
     setState(() {
       cartItems[itemName] = cartItems[itemName]! + 1;
     });
   }
 
-  // Function to decrease quantity of an item in the cart
   void _decreaseQuantity(String itemName) {
     setState(() {
       if (cartItems[itemName]! > 1) {
@@ -74,14 +71,12 @@ class _ShoppingPageState extends State<ShoppingPage> {
     });
   }
 
-  // Function to save cart items to Firebase "cart" table
   Future<void> _saveCartToDatabase() async {
     final cartRef = _database.child("cart");
 
     try {
       await cartRef.remove(); // Clear existing cart data
 
-      // Save each cart item to Firebase
       cartItems.forEach((itemName, quantity) async {
         final itemData = items.firstWhere((item) => item['itemName'] == itemName);
         final price = itemData['price'];
@@ -99,7 +94,6 @@ class _ShoppingPageState extends State<ShoppingPage> {
     }
   }
 
-  // Start listening for voice commands
   void _startListening() async {
     bool available = await _speech.initialize(
       onStatus: (status) => print('Status: $status'),
@@ -116,32 +110,29 @@ class _ShoppingPageState extends State<ShoppingPage> {
     }
   }
 
-  // Stop listening for voice commands
   void _stopListening() {
     setState(() => _isListening = false);
     _speech.stop();
   }
 
-  // Process the voice command to add an item to the cart
   void _processVoiceCommand(String command) {
-    bool itemFound = false;
+    final addCommand = RegExp(r'add (\w+) to the cart');
+    final match = addCommand.firstMatch(command);
 
-    for (var item in items) {
-      if (command.contains(item['itemName'].toLowerCase())) {
-        _addToCart(item['itemName']); // Add the item to the cart
-        print("${item['itemName']} added to cart via voice command.");
-        itemFound = true;
-        break;
+    if (match != null) {
+      final itemName = match.group(1);
+      final itemExists = items.any((item) => item['itemName'].toLowerCase() == itemName);
+
+      if (itemExists) {
+        _addToCart(itemName!); // Add the item to the cart if it exists
+        print("$itemName added to cart via voice command.");
+      } else {
+        _showMessage("Item not available");
+        print("Item not available in the database.");
       }
-    }
-
-    if (!itemFound) {
-      _showMessage("Item not available");
-      print("Item not available in the database.");
     }
   }
 
-  // Show a message when the item is not found
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -203,69 +194,69 @@ class _ShoppingPageState extends State<ShoppingPage> {
             padding: const EdgeInsets.all(15.0),
             child: items.isNotEmpty
                 ? Expanded(
-                    child: GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3, // 3 columns
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 0.8,
-                      ),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final itemName = items[index]['itemName'];
-                        final itemPrice = items[index]['price'];
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3, // 3 columns
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: 0.8,
+                ),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final itemName = items[index]['itemName'];
+                  final itemPrice = items[index]['price'];
 
-                        return Card(
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  itemName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text("Price: $itemPrice"),
-                                const Spacer(),
-                                cartItems.containsKey(itemName)
-                                    ? Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          IconButton(
-                                            onPressed: () {
-                                              _decreaseQuantity(itemName);
-                                            },
-                                            icon: const Icon(Icons.remove),
-                                          ),
-                                          Text(cartItems[itemName].toString()),
-                                          IconButton(
-                                            onPressed: () {
-                                              _increaseQuantity(itemName);
-                                            },
-                                            icon: const Icon(Icons.add),
-                                          ),
-                                        ],
-                                      )
-                                    : ElevatedButton(
-                                        onPressed: () {
-                                          _addToCart(itemName);
-                                          print('$itemName added to cart');
-                                        },
-                                        child: const Text("Add to Cart"),
-                                      ),
-                              ],
+                  return Card(
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            itemName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
                           ),
-                        );
-                      },
+                          const SizedBox(height: 10),
+                          Text("Price: $itemPrice"),
+                          const Spacer(),
+                          cartItems.containsKey(itemName)
+                              ? Row(
+                            mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
+                            children: [
+                              IconButton(
+                                onPressed: () {
+                                  _decreaseQuantity(itemName);
+                                },
+                                icon: const Icon(Icons.remove),
+                              ),
+                              Text(cartItems[itemName].toString()),
+                              IconButton(
+                                onPressed: () {
+                                  _increaseQuantity(itemName);
+                                },
+                                icon: const Icon(Icons.add),
+                              ),
+                            ],
+                          )
+                              : ElevatedButton(
+                            onPressed: () {
+                              _addToCart(itemName);
+                              print('$itemName added to cart');
+                            },
+                            child: const Text("Add to Cart"),
+                          ),
+                        ],
+                      ),
                     ),
-                  )
+                  );
+                },
+              ),
+            )
                 : const Text("No items available"),
           ),
           const SizedBox(height: 20),

@@ -2,6 +2,7 @@ import 'package:demo_app/pages/home_page.dart';
 import 'package:demo_app/pages/profile_page.dart';
 import 'package:demo_app/pages/settings_page.dart';
 import 'package:demo_app/pages/shopping_page.dart';
+import 'package:demo_app/pages/shopping_list.dart';  // Import the shopping_list.dart
 import 'package:flutter/material.dart';
 
 class MainPage extends StatefulWidget {
@@ -15,6 +16,7 @@ class _MainPageState extends State<MainPage> {
   final List<Widget> pages = [
     const HomePage(),
     const ShoppingPage(),
+    const Voicepage(), // Add ShoppingList to pages
     const ProfilePage(),
     const SettingsPage(),
   ];
@@ -32,7 +34,7 @@ class _MainPageState extends State<MainPage> {
             currentPage = value;
           });
         },
-        selectedItemColor: Colors.black,  // For selected item color
+        selectedItemColor: Colors.black, // For selected item color
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
@@ -49,11 +51,17 @@ class _MainPageState extends State<MainPage> {
           ),
           BottomNavigationBarItem(
             icon: Icon(
+              Icons.list,  // Icon for shopping list
+            ),
+            label: "Shopping List",  // Label for shopping list
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(
               Icons.person,
             ),
             label: "Profile",
           ),
-           BottomNavigationBarItem(
+          BottomNavigationBarItem(
             icon: Icon(
               Icons.settings,
             ),
