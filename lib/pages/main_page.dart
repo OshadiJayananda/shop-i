@@ -3,7 +3,8 @@ import 'package:demo_app/pages/profile_page.dart';
 import 'package:demo_app/pages/settings_page.dart';
 import 'package:demo_app/pages/shopping_page.dart';
 import 'package:demo_app/pages/shopping_list.dart';
-import 'package:demo_app/pages/Barcode_scanner.dart';// Import the BarcodeScanner page
+import 'package:demo_app/pages/Barcode_scanner.dart'; // Import the BarcodeScanner page
+import 'package:demo_app/pages/camera_page.dart';
 import 'package:flutter/material.dart';
 
 class MainPage extends StatefulWidget {
@@ -15,6 +16,7 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   final List<Widget> pages = [
+    const CameraPage(),
     const HomePage(),
     const ShoppingPage(),
     const Voicepage(),
@@ -36,11 +38,19 @@ class _MainPageState extends State<MainPage> {
             currentPage = value;
           });
         },
-        selectedItemColor: Colors.black,
+        selectedItemColor: Colors.black, // For selected item color
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
+            icon: Icon(
+              Icons.camera,
+            ),
+            label: "Camera",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(
+              Icons.home,
+            ),
             label: "Home",
           ),
           BottomNavigationBarItem(
@@ -60,7 +70,9 @@ class _MainPageState extends State<MainPage> {
             label: "Profile",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
+            icon: Icon(
+              Icons.settings,
+            ),
             label: "Settings",
           ),
         ],
