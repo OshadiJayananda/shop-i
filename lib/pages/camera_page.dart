@@ -1,8 +1,14 @@
-import 'package:camera/camera.dart';
-import 'package:google_ml_kit/google_ml_kit.dart';
-import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'package:camera/camera.dart';
+import 'package:demo_app/consts.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter_gemini/flutter_gemini.dart' as gemini;
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:google_ml_kit/google_ml_kit.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -11,7 +17,14 @@ class CameraPage extends StatefulWidget {
   State<CameraPage> createState() => _CameraPageState();
 }
 
+extension StringComparison on String {
+  bool equalsIgnoreCase(String other) {
+    return this.toLowerCase() == other.toLowerCase();
+  }
+}
+
 class _CameraPageState extends State<CameraPage> {
+  final _database = FirebaseDatabase.instance.ref();
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   XFile? _imageFile;
@@ -25,28 +38,95 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
-  void _analyzeImage() async {
+  Future<void> matchProducts(String scannedText, List<String> productNames,
+      BuildContext context) async {
+    final apiKey = GEMINI_API_KEY;
+
+    final model = GenerativeModel(
+      model: 'gemini-1.5-flash',
+      apiKey: apiKey,
+      generationConfig: GenerationConfig(
+        temperature: 1,
+        topK: 64,
+        topP: 0.95,
+        maxOutputTokens: 8192,
+        responseMimeType: 'application/json',
+      ),
+      systemInstruction: Content.system(
+          'Only match the product names from the provided list. Do not infer or generate new product names.'),
+    );
+
+    final chat = model.startChat(history: []);
+
+    // Prepare the product list in a readable format
+    final productDescriptions = productNames.map((name) {
+      return 'Product Name: $name';
+    }).join('\n');
+
+    final inputMessage = 'Find matching products from the following list:\n'
+        '$productDescriptions\n\nScanned Text: $scannedText';
+
+    final content = Content.text(inputMessage);
+    final response = await chat.sendMessage(content);
+
+    print("Matching result: ${response.text}");
+
+    final productNameFromGemini =
+        response.text?.trim(); // Extracted from Gemini response
+
+    // Ensure that productNameFromGemini is not null or empty before comparing
+    final isProductInInventory = productNames.any((productName) {
+      final normalizedProductNameFromGemini =
+          productNameFromGemini?.trim() ?? '';
+
+      return normalizedProductNameFromGemini.isNotEmpty &&
+          productName.equalsIgnoreCase(normalizedProductNameFromGemini);
+    });
+
+    String resultMessage = isProductInInventory
+        ? 'Product is available in the inventory!'
+        : 'Product is NOT available in the inventory.';
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Matching result'),
+          content: SingleChildScrollView(
+            child: Text('${response.text} \n\n $resultMessage'),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _analyzeImage(BuildContext context) async {
     if (_imageFile != null) {
       try {
-        // Load the image from file
         final inputImage = InputImage.fromFilePath(_imageFile!.path);
-
-        // Create an instance of the text recognizer
         final textRecognizer = GoogleMlKit.vision.textRecognizer();
-
-        // Process the image
         final RecognizedText recognizedText =
             await textRecognizer.processImage(inputImage);
 
-        // Handle the recognized text
-        final text = recognizedText.text;
+        final text = recognizedText.text.trim();
 
-        // Show the recognized text in an alert dialog
+        // if (text.isEmpty) {
+        //   throw Exception("No text recognized in the image.");
+        // }
+
         showDialog(
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: Text('Recognized Text'),
+              title: Text('Scanned Text'),
               content: SingleChildScrollView(
                 child: Text(text),
               ),
@@ -62,19 +142,170 @@ class _CameraPageState extends State<CameraPage> {
           },
         );
 
-        // Dispose of the recognizer
+        processScannedText('Dyson', context);
+
+        // final productNames = await _fetchProductNamesFromFirebase();
+        // final productBrands = await _fetchProductBrandsFromFirebase();
+
+        // await matchProducts(text, productNames, context);
+
         textRecognizer.close();
       } catch (e) {
-        // Handle exceptions
         print('Error analyzing image: $e');
+
+        showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text('Error'),
+              content: Text('Error analyzing image: $e'),
+              actions: <Widget>[
+                TextButton(
+                  child: Text('OK'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
+            );
+          },
+        );
       }
     }
+  }
+
+  Future<void> processScannedText(
+      String scannedText, BuildContext context) async {
+    // Fetch product details from Firebase
+    final productDetails = await _fetchProductDetailsFromFirebase();
+
+    // Call the matching function
+    matchScannedTextWithProducts(scannedText, productDetails, context);
+  }
+
+  Future<void> matchScannedTextWithProducts(String scannedText,
+      List<Map<String, String>> productDetails, BuildContext context) async {
+    // Normalize scanned text for comparison
+    final normalizedScannedText = scannedText.trim().toLowerCase();
+
+    // Check if the scanned text matches any product name or brand
+    Map<String, String>? matchedProduct;
+
+    for (var product in productDetails) {
+      final productName = product['name']?.toLowerCase() ?? '';
+      final productBrand = product['brand']?.toLowerCase() ?? '';
+
+      if (productName.contains(normalizedScannedText) ||
+          productBrand.contains(normalizedScannedText)) {
+        matchedProduct = product;
+        break;
+      }
+    }
+
+    // Prepare the result message
+    String resultMessage;
+    if (matchedProduct != null) {
+      resultMessage = 'Product found!\n\n'
+          'Product ID: ${matchedProduct['id']}\n'
+          'Product Name: ${matchedProduct['name']}\n'
+          'Brand: ${matchedProduct['brand']}';
+    } else {
+      resultMessage = 'No matching product found in the inventory.';
+    }
+
+    // Show the result in a dialog
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Matching Result'),
+          content: SingleChildScrollView(
+            child: Text(resultMessage),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('OK'),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
+  }
+
+  Future<List<Map<String, String>>> _fetchProductDetailsFromFirebase() async {
+    try {
+      final snapshot = await _database.child('products').get();
+      if (snapshot.exists) {
+        final data = snapshot.value as Map?;
+        if (data != null) {
+          final productDetails = data.values.map((e) {
+            final product = e as Map?;
+            return {
+              'id': product?['Product ID']?.toString() ?? '',
+              'name': product?['Product Name']?.toString() ?? '',
+              'brand': product?['Brand']?.toString() ?? '',
+            };
+          }).toList();
+
+          // Filter out any entries with missing or empty values for ID
+          return productDetails
+              .where((detail) => detail['id']?.isNotEmpty ?? false)
+              .toList();
+        }
+      }
+    } catch (e) {
+      print("Error fetching product details from Firebase: $e");
+    }
+    return [];
+  }
+
+  Future<List<String>> _fetchProductNamesFromFirebase() async {
+    try {
+      final snapshot = await _database.child('products').get();
+      if (snapshot.exists) {
+        final data = snapshot.value as Map?;
+        if (data != null) {
+          final productNames = data.values.map((e) {
+            final product = e as Map?;
+            return product?['Product Name']?.toString() ?? '';
+          }).toList();
+
+          return productNames.where((name) => name.isNotEmpty).toList();
+        }
+      }
+    } catch (e) {
+      print("Error fetching product names and brands from Firebase: $e");
+    }
+    return [];
+  }
+
+  Future<List<String>> _fetchProductBrandsFromFirebase() async {
+    try {
+      final snapshot = await _database.child('products').get();
+      if (snapshot.exists) {
+        final data = snapshot.value as Map?;
+        if (data != null) {
+          final productNames = data.values.map((e) {
+            final product = e as Map?;
+            return product?['Brand']?.toString() ?? '';
+          }).toList();
+
+          return productNames.where((name) => name.isNotEmpty).toList();
+        }
+      }
+    } catch (e) {
+      print("Error fetching product names and brands from Firebase: $e");
+    }
+    return [];
   }
 
   Future<void> _initializeCamera() async {
@@ -147,46 +378,29 @@ class _CameraPageState extends State<CameraPage> {
                   }
                 },
               ),
-            ),
-
-          // Display captured image if available
-          if (_imageFile != null)
-            Expanded(
-              child: Image.file(
-                File(_imageFile!.path),
-                fit: BoxFit.cover,
-                width: double.infinity,
-              ),
-            ),
-          // Capture Image Button
-          if (_imageFile == null)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                onPressed: _takePicture,
-                child: _isCapturing
-                    ? const CircularProgressIndicator()
-                    : const Text('Capture Image'),
-              ),
             )
           else
-            Padding(
-              padding: const EdgeInsets.only(top: 16.0),
-              child: ElevatedButton(
-                onPressed: _retakePicture, // Implement _retakePicture logic
-                child: const Text('Retake Image'),
-              ),
-            ),
-
-          // Analyse Image Button, only shows after image is captured
-          if (_imageFile != null)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton(
-                onPressed: _analyzeImage,
-                child: const Text('Analyze Image'),
-              ),
-            ),
+            Expanded(
+                child: Center(
+              child: Image.file(File(_imageFile!.path)),
+            )),
+          const SizedBox(height: 10),
+          isImageCaptured
+              ? ElevatedButton(
+                  onPressed: () {
+                    _analyzeImage(context);
+                  },
+                  child: const Text('Analyze Image'),
+                )
+              : ElevatedButton(
+                  onPressed: _takePicture,
+                  child: const Text('Capture Image'),
+                ),
+          const SizedBox(height: 10),
+          ElevatedButton(
+            onPressed: _retakePicture,
+            child: const Text('Retake Image'),
+          ),
         ],
       ),
     );
