@@ -52,6 +52,7 @@ Map<String, Map<String, dynamic>> cartItems = {};
     }
   }
 
+
   // Update cart item count
 void _updateCartCount() {
 int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
@@ -91,6 +92,7 @@ void _startListening() async {
       } else if (_containsKeywords(command, ['add', 'cart'])) {
         print('Detected "add to cart" command'); // Debugging print
         _handleAddCommand(command);
+
       } else {
         print('Unrecognized command'); // Debugging print
       }
@@ -104,6 +106,7 @@ void _startListening() async {
 }
 
 
+
 // Helper function to check for keywords in the command
 bool _containsKeywords(String command, List<String> keywords) {
   for (String keyword in keywords) {
@@ -113,6 +116,8 @@ bool _containsKeywords(String command, List<String> keywords) {
   }
   return true;
 }
+
+
 
 
 
@@ -152,6 +157,7 @@ bool _containsKeywords(String command, List<String> keywords) {
         final price = items[itemName]['price'] as double;
         final totalPrice = price * quantity;
 
+
         setState(() {
           if (cartItems.containsKey(itemName)) {
             cartItems[itemName]!['quantity'] = (cartItems[itemName]!['quantity'] ?? 0) + quantity;
@@ -173,6 +179,7 @@ await _speak('$quantity $itemName added to the cart');
     await  _speak('Could not understand the command. Please try again.');
     }
   }
+
 
   // Handle navigating to CartPage and saving items to the cart database
   Future<void> _handleShowCartCommand() async {
@@ -201,6 +208,7 @@ builder: (context) => CartPage(cartItems: cartItems),
   // Text-to-speech feedback
   Future<void> _speak(String message) async {
     await _flutterTts.speak(message);
+
   }
 
   @override
@@ -233,6 +241,7 @@ builder: (context) => CartPage(cartItems: cartItems),
           ),
         ],
       ),
+
       body: _buildItemList(),
     );
   }
@@ -252,6 +261,7 @@ builder: (context) => CartPage(cartItems: cartItems),
             onPressed: () {
               _handleAddCommand('add 1 $itemName to the cart');
             },
+
           ),
         );
       },
