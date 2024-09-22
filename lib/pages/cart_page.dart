@@ -53,13 +53,22 @@ class _CartPageState extends State<CartPage> {
     });
   }
 
+  // Delete item from Firebase and UI
+  Future<void> _deleteItem(String itemName) async {
+    await _cartRef.child(itemName).remove(); // Delete item from Firebase
+    setState(() {
+      cartItems.remove(itemName); // Remove item from UI
+    });
+  }
+
   // Voice command listener
   void _listenToVoiceCommands() async {
     bool available = await _speechToText.initialize();
     if (available) {
       setState(() => _isListening = true);
       _speechToText.listen(onResult: (result) {
-        if (result.recognizedWords.toLowerCase() == "checkout") {
+        final recognizedWords = result.recognizedWords.toLowerCase();
+        if (recognizedWords.contains("checkout")) {
           // Navigate to OrderPage when "checkout" command is detected
           Navigator.push(
             context,
@@ -67,67 +76,98 @@ class _CartPageState extends State<CartPage> {
               builder: (context) => OrderPage(), // Navigate to OrderPage
             ),
           );
+        } else if (recognizedWords.startsWith("delete")) {
+          final itemName = recognizedWords.replaceFirst("delete", "").trim(); // Extract item name
+          if (cartItems.containsKey(itemName)) {
+            _deleteItem(itemName); // Delete the item
+          } else {
+            print("Item not found: $itemName"); // Handle case when item is not found
+          }
         }
       });
     } else {
       setState(() => _isListening = false);
     }
   }
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: const Text('Cart'),
+    ),
+    body: cartItems.isEmpty
+        ? const Center(child: Text('Your cart is empty'))
+        : Column(
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal, // Enable horizontal scrolling
+                    child: DataTable(
+                      columns: const [
+                        DataColumn(label: Text('Item Name')),
+                        DataColumn(label: Text('Quantity')),
+                        DataColumn(label: Text('Price')),
+                        DataColumn(label: Text('Total')),
+                        DataColumn(label: Text('Actions')),
+                      ],
+                      rows: cartItems.entries.map((entry) {
+                        String itemName = entry.key;
+                        final item = entry.value;
+                        int quantity = item['quantity'] as int;
+                        double price = item['price'] as double;
+                        double totalPrice = item['totalPrice'] as double;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Cart'),
-      ),
-      body: cartItems.isEmpty
-          ? const Center(child: Text('Your cart is empty'))
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: cartItems.length,
-                    itemBuilder: (context, index) {
-                      String itemName = cartItems.keys.elementAt(index);
-                      final item = cartItems[itemName]!;
-                      int quantity = item['quantity'] as int;
-                      double price = item['price'] as double;
-                      double totalPrice = item['totalPrice'] as double;
-
-                      return ListTile(
-                        title: Text(itemName),
-                        subtitle: Text('Quantity: $quantity\nPrice: \$${price.toStringAsFixed(2)}'),
-                        trailing: Text('Total: \$${totalPrice.toStringAsFixed(2)}'),
-                      );
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Total: \$${_calculateTotalPrice().toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                      ElevatedButton(
-                        onPressed: () {
-                          // Manually navigate to OrderPage when the button is pressed
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => OrderPage(),
+                        return DataRow(cells: [
+                          DataCell(Text(itemName)),
+                          DataCell(Text(quantity.toString())),
+                          DataCell(Text('\$${price.toStringAsFixed(2)}')),
+                          DataCell(Text('\$${totalPrice.toStringAsFixed(2)}')),
+                          DataCell(
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () {
+                                    _deleteItem(itemName); // Delete item
+                                  },
+                                ),
+                              ],
                             ),
-                          );
-                        },
-                        child: const Text('Checkout'),
-                      ),
-                    ],
+                          ),
+                        ]);
+                      }).toList(),
+                    ),
                   ),
                 ),
-              ],
-            ),
-    );
-  }
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Total: \$${_calculateTotalPrice().toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        // Manually navigate to OrderPage when the button is pressed
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => OrderPage(),
+                          ),
+                        );
+                      },
+                      child: const Text('Checkout'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+  );
+}
 }
