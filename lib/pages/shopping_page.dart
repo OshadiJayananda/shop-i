@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt; // Import the speech_to_text package
-import 'cart_page.dart'; // Import the CartPage
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
+import 'cart_page.dart'; // Import CartPage
 
 class ShoppingPage extends StatefulWidget {
   const ShoppingPage({super.key});
@@ -11,185 +12,220 @@ class ShoppingPage extends StatefulWidget {
 }
 
 class _ShoppingPageState extends State<ShoppingPage> {
-  final _database = FirebaseDatabase.instance.ref();
-  List<Map<String, dynamic>> items = [];
-  Map<String, int> cartItems = {}; // To store itemName and quantity
-  int cartCount = 0; // Tracks number of items in cart
+  final DatabaseReference _itemRef = FirebaseDatabase.instance.ref().child('items');
+  final DatabaseReference _cartRef = FirebaseDatabase.instance.ref().child('cart');
+  late stt.SpeechToText _speech;
+  late FlutterTts _flutterTts;
 
-  late stt.SpeechToText _speech; // Speech recognition object
-  bool _isListening = false;
-  String _lastCommand = '';
+  Map<String, dynamic> items = {}; // For holding fetched items
+  // Map<String, Map<String, dynamic>> cart = {}; // Cart items with price and total price
+Map<String, Map<String, dynamic>> cartItems = {};
+
+  int _cartItemCount = 0; 
+  bool _isListening = false; // To track the listening state
 
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
-    _activateListeners();
+    _flutterTts = FlutterTts();
+    _fetchItems();
+    _initSpeechRecognition();
   }
 
-  void _activateListeners() {
-    _database.child("items").onValue.listen((event) {
-      final data = Map<String, dynamic>.from(event.snapshot.value as Map);
-      final List<Map<String, dynamic>> fetchedItems = [];
-
+  // Fetch items from the Firebase database
+  Future<void> _fetchItems() async {
+    DataSnapshot snapshot = await _itemRef.get();
+    print("Fetched items: ${snapshot.value}");
+    if (snapshot.value is Map) {
+      final data = snapshot.value as Map;
+      final fetchedItems = <String, Map<String, dynamic>>{};
       data.forEach((key, value) {
-        fetchedItems.add({
-          'itemName': value['itemName'],
-          'price': value['price'],
-        });
+        final itemData = Map<String, dynamic>.from(value);
+        final itemName = itemData['itemName'] as String;
+        final price = itemData['price'] as double;
+        fetchedItems[itemName.toLowerCase()] = {'price': price};
       });
-
       setState(() {
         items = fetchedItems;
       });
-    });
+    }
   }
 
-  // Function to handle adding items to cart with an initial quantity of 1
-  void _addToCart(String itemName, [int quantity = 1]) {
-    setState(() {
-      cartItems[itemName] = cartItems.containsKey(itemName)
-          ? cartItems[itemName]! + quantity
-          : quantity;
-      cartCount = cartItems.length;
-    });
-  }
+  // Update cart item count
+void _updateCartCount() {
+int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
+  setState(() {
+    _cartItemCount = count;
+  });
+}
 
-  // Function to increase quantity of an item in the cart
-  void _increaseQuantity(String itemName) {
-    setState(() {
-      cartItems[itemName] = cartItems[itemName]! + 1;
-    });
-  }
 
-  // Function to decrease quantity of an item in the cart
-  void _decreaseQuantity(String itemName) {
-    setState(() {
-      if (cartItems[itemName]! > 1) {
-        cartItems[itemName] = cartItems[itemName]! - 1;
-      } else {
-        cartItems.remove(itemName); // Remove item from cart if quantity is 0
-        cartCount = cartItems.length;
-      }
-    });
-  }
-
-  // Function to save cart items to Firebase "cart" table
-  Future<void> _saveCartToDatabase() async {
-    final cartRef = _database.child("cart");
-
-    try {
-      await cartRef.remove(); // Clear existing cart data
-
-      // Save each cart item to Firebase
-      cartItems.forEach((itemName, quantity) async {
-        final itemData = items.firstWhere((item) => item['itemName'] == itemName);
-        final price = itemData['price'];
-
-        await cartRef.push().set({
-          'itemName': itemName,
-          'price': price,
-          'quantity': quantity,
-        });
+  // Initialize speech recognition
+  void _initSpeechRecognition() async {
+    bool available = await _speech.initialize();
+    if (available) {
+      setState(() {
+        _startListening();
       });
-
-      print("Cart items saved to Firebase successfully.");
-    } catch (e) {
-      print("Error saving cart to Firebase: $e");
+    } else {
+      print('Speech recognition is not available');
     }
   }
 
   // Start listening for voice commands
-  void _startListening() async {
-    bool available = await _speech.initialize(
-      onStatus: (status) => print('Status: $status'),
-      onError: (error) => print('Error: $error'),
-    );
-    if (available) {
-      setState(() => _isListening = true);
-      _speech.listen(onResult: (val) {
-        setState(() {
-          _lastCommand = val.recognizedWords.toLowerCase();
-          _processVoiceCommand(_lastCommand); // Process the voice command
-        });
-      });
-    }
-  }
+void _startListening() async {
+  if (_isListening) return;
 
-  // Stop listening for voice commands
-  void _stopListening() {
-    setState(() => _isListening = false);
-    _speech.stop();
-  }
-
-  // Process the voice command to add an item to the cart
-  void _processVoiceCommand(String command) {
-    bool itemFound = false;
-
-    for (var item in items) {
-      if (command.contains(item['itemName'].toLowerCase())) {
-        _addToCart(item['itemName']); // Add the item to the cart
-        print("${item['itemName']} added to cart via voice command.");
-        itemFound = true;
-        break;
+  try {
+    await _speech.listen(onResult: (result) {
+      String command = result.recognizedWords.toLowerCase().trim();
+      
+      // Print the recognized command for debugging
+      print('Recognized command: $command');
+      
+      // Check if key words 'show' and 'cart' are in the command
+      if (_containsKeywords(command, ['show', 'cart'])) {
+        print('Detected "show cart" command'); // Debugging print
+        _handleShowCartCommand();
+      } else if (_containsKeywords(command, ['add', 'cart'])) {
+        print('Detected "add to cart" command'); // Debugging print
+        _handleAddCommand(command);
+      } else {
+        print('Unrecognized command'); // Debugging print
       }
-    }
+    });
+    setState(() {
+      _isListening = true;
+    });
+  } catch (e) {
+    print('Error starting speech recognition: $e');
+  }
+}
 
-    if (!itemFound) {
-      _showMessage("Item not available");
-      print("Item not available in the database.");
+
+// Helper function to check for keywords in the command
+bool _containsKeywords(String command, List<String> keywords) {
+  for (String keyword in keywords) {
+    if (!command.contains(keyword)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+
+
+
+  // Stop listening
+  void _stopListening() async {
+    if (!_isListening) return; // Avoid stopping if not listening
+
+    try {
+      await _speech.stop();
+      setState(() {
+        _isListening = false;
+      });
+    } catch (e) {
+      print('Error stopping speech recognition: $e');
     }
   }
 
-  // Show a message when the item is not found
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
-    );
+  @override
+  void dispose() {
+    _stopListening(); // Ensure listening is stopped when widget is disposed
+    super.dispose();
+  }
+
+  // Handle adding items and quantities to the cart
+  Future<void> _handleAddCommand(String command) async {
+    final itemNameRegex = RegExp(r'add (\d+)?\s?(.*?)\s?to the cart', caseSensitive: false);
+    final match = itemNameRegex.firstMatch(command);
+
+    if (match != null) {
+      int quantity = match.group(1) != null ? int.parse(match.group(1)!) : 1;
+      String itemName = match.group(2)!.trim().toLowerCase();
+
+      print("Command parsed: itemName = $itemName, quantity = $quantity");
+
+      if (items.containsKey(itemName)) {
+        final price = items[itemName]['price'] as double;
+        final totalPrice = price * quantity;
+
+        setState(() {
+          if (cartItems.containsKey(itemName)) {
+            cartItems[itemName]!['quantity'] = (cartItems[itemName]!['quantity'] ?? 0) + quantity;
+            cartItems[itemName]!['totalPrice'] = (cartItems[itemName]!['quantity'] as int) * price;
+          } else {
+            cartItems[itemName] = {
+              'price': price,
+              'quantity': quantity,
+              'totalPrice': totalPrice,
+            };
+          }
+          _updateCartCount(); // Update cart item count
+        });
+await _speak('$quantity $itemName added to the cart');      
+} else {
+    await    _speak('$itemName is not available');
+      }
+    } else {
+    await  _speak('Could not understand the command. Please try again.');
+    }
+  }
+
+  // Handle navigating to CartPage and saving items to the cart database
+  Future<void> _handleShowCartCommand() async {
+    try {
+      print("Saving cart: $cartItems");
+
+      // Save the cart data to Firebase
+      await _cartRef.set(cartItems);
+
+      await _speak("Navigating to your cart");
+
+      // Ensure the CartPage can handle empty or populated cart
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+builder: (context) => CartPage(cartItems: cartItems),
+        ),
+      );
+       print("Navigation to CartPage successful"); 
+    } catch (e) {
+      print("Error saving cart: $e");
+      _speak("There was an error saving the cart.");
+    }
+  }
+
+  // Text-to-speech feedback
+  Future<void> _speak(String message) async {
+    await _flutterTts.speak(message);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Shopping"),
+        title: const Text('Shopping Page'),
         actions: [
           Stack(
             children: [
               IconButton(
                 icon: const Icon(Icons.shopping_cart),
                 onPressed: () {
-                  _saveCartToDatabase(); // Save cart items to Firebase
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const CartPage()),
-                  );
+                  _handleShowCartCommand(); // Navigate to CartPage when cart icon is clicked
                 },
               ),
-              if (cartCount > 0)
+              if (_cartItemCount > 0)
                 Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 18,
-                      minHeight: 18,
-                    ),
+                  right: 0,
+                  child: CircleAvatar(
+                    radius: 10,
+                    backgroundColor: Colors.red,
                     child: Text(
-                      '$cartCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
+                      _cartItemCount.toString(),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
                     ),
                   ),
                 ),
@@ -197,84 +233,28 @@ class _ShoppingPageState extends State<ShoppingPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(15.0),
-            child: items.isNotEmpty
-                ? Expanded(
-                    child: GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3, // 3 columns
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 0.8,
-                      ),
-                      itemCount: items.length,
-                      itemBuilder: (context, index) {
-                        final itemName = items[index]['itemName'];
-                        final itemPrice = items[index]['price'];
+      body: _buildItemList(),
+    );
+  }
 
-                        return Card(
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  itemName,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                                Text("Price: $itemPrice"),
-                                const Spacer(),
-                                cartItems.containsKey(itemName)
-                                    ? Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          IconButton(
-                                            onPressed: () {
-                                              _decreaseQuantity(itemName);
-                                            },
-                                            icon: const Icon(Icons.remove),
-                                          ),
-                                          Text(cartItems[itemName].toString()),
-                                          IconButton(
-                                            onPressed: () {
-                                              _increaseQuantity(itemName);
-                                            },
-                                            icon: const Icon(Icons.add),
-                                          ),
-                                        ],
-                                      )
-                                    : ElevatedButton(
-                                        onPressed: () {
-                                          _addToCart(itemName);
-                                          print('$itemName added to cart');
-                                        },
-                                        child: const Text("Add to Cart"),
-                                      ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  )
-                : const Text("No items available"),
+  Widget _buildItemList() {
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        String itemName = items.keys.elementAt(index);
+        String price = items[itemName]['price'].toString();
+
+        return ListTile(
+          title: Text(itemName),
+          subtitle: Text('Price: $price'),
+          trailing: IconButton(
+            icon: const Icon(Icons.add_shopping_cart),
+            onPressed: () {
+              _handleAddCommand('add 1 $itemName to the cart');
+            },
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: _isListening ? _stopListening : _startListening,
-            child: Text(_isListening ? 'Stop Listening' : 'Start Voice Command'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
