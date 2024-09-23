@@ -1,7 +1,7 @@
 import 'package:demo_app/consts.dart';
 import 'package:demo_app/pages/main_page.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter_gemini/flutter_gemini.dart';
+// import 'package:flutter_gemini/flutter_gemini.dart';
 import 'firebase_options.dart';
 import 'package:flutter/material.dart';
 
