@@ -142,7 +142,16 @@ class _ShoppingPageState extends State<ShoppingPage> {
     if (cartItems.isEmpty) {
       await _speak("Your cart is empty");
       print("Cart is empty.");
+
+
     } else {
+
+      // Clear the existing cart in the database
+    await _cartRef.remove();
+    print("Existing cart items cleared from the database.");
+
+
+
       for (var entry in cartItems.entries) {
         String itemName = entry.key;
         Map<String, dynamic> itemData = entry.value;
@@ -174,6 +183,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
     setState(() {
       if (cartItems.containsKey(itemName)) {
         cartItems[itemName]!['quantity'] += quantity;
+        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity']; // Recalculate totalPrice
+
       } else {
         cartItems[itemName] = {
           'price': price,
@@ -258,6 +269,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
         setState(() {
           if (cartItems.containsKey(itemName)) {
             cartItems[itemName]!['quantity'] += quantity;
+             cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity'];
           } else {
             cartItems[itemName] = {
               'price': price,
@@ -273,7 +285,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
           'itemName': itemName,
           'quantity': cartItems[itemName]!['quantity'],
           'price': price,
-          'totalPrice': cartItems[itemName]!['quantity'] * price,
+          'totalPrice': cartItems[itemName]!['totalPrice'] ,
         });
 
         print("Added $itemName to cart with quantity: $quantity");

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
+import 'cash_page.dart'; // Import the CashPage
 
 class OrderPage extends StatefulWidget {
   const OrderPage({super.key});
@@ -11,13 +14,34 @@ class OrderPage extends StatefulWidget {
 class _OrderPageState extends State<OrderPage> {
   final _database = FirebaseDatabase.instance.ref();
   List<Map<String, dynamic>> cartItems = [];
+
   double totalAmount = 0.0;
-  String paymentMethod = 'Card';
+  String paymentMethod = 'Card'; // Default to Card
+  late stt.SpeechToText _speech;
+  late FlutterTts _flutterTts;
+  bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
     _loadCartItems();
+    _initializeTts();
+    _speech = stt.SpeechToText();
+  }
+
+  // Initialize Text-to-Speech
+  void _initializeTts() {
+    _flutterTts = FlutterTts();
+  }
+
+  // Speak the total amount when navigating to the OrderPage
+  Future<void> _speakTotalAmount() async {
+    if (_flutterTts == null) {
+      _initializeTts(); // Ensure TTS is initialized
+    }
+    await _flutterTts.setLanguage('en-US');
+    await _flutterTts.setPitch(1.0);
+    await _flutterTts.speak("The total amount is \$${totalAmount.toStringAsFixed(2)}");
   }
 
   // Load cart items from Firebase Realtime Database
@@ -65,7 +89,46 @@ class _OrderPageState extends State<OrderPage> {
         cartItems = fetchedCartItems;
         totalAmount = total;
       });
+
+      // Speak the total amount when the cart is loaded
+      _speakTotalAmount();
     });
+  }
+
+  // Start listening to voice commands
+  void _startListening() async {
+    if (_isListening) return; // Don't start listening if already listening
+
+    bool available = await _speech.initialize(
+      onStatus: (val) => print('onStatus: $val'),
+      onError: (val) => print('onError: $val'),
+    );
+
+    if (available) {
+      setState(() => _isListening = true);
+      _speech.listen(
+        onResult: (val) {
+          _onSpeechResult(val.recognizedWords);
+        },
+      );
+    }
+  }
+
+  // Stop listening to voice commands
+  void _stopListening() {
+    setState(() => _isListening = false);
+    _speech.stop();
+  }
+
+  // Handle speech result
+  void _onSpeechResult(String result) {
+    if (result.toLowerCase().contains('cash payment')) {
+      _handlePaymentMethod('Cash');
+    } else if (result.toLowerCase().contains('card payment')) {
+      _handlePaymentMethod('Card');
+    } else if (result.toLowerCase().contains('do payment')) {
+      _doPayment(); // Handle the do payment command
+    }
   }
 
   // Handle payment method selection
@@ -78,18 +141,38 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   // Handle payment
-  void _doPayment() {
-    // Implement payment logic here
-    // For now, just show a confirmation
+// Handle payment
+void _doPayment() {
+  if (paymentMethod == 'Cash') {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CashPage(totalAmount: totalAmount)), // Pass the totalAmount here
+    );
+  } else {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text('Payment of \$${totalAmount.toStringAsFixed(2)} via $paymentMethod'),
     ));
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Order Review")),
+      appBar: AppBar(
+        title: const Text("Order Review"),
+        actions: [
+          _isListening
+              ? IconButton(
+                  icon: const Icon(Icons.mic),
+                  onPressed: _stopListening,
+                )
+              : IconButton(
+                  icon: const Icon(Icons.mic_none),
+                  onPressed: _startListening,
+                ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(
