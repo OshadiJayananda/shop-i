@@ -71,10 +71,11 @@ class _CartPageState extends State<CartPage> {
           print("Recognized words: $recognizedWords"); // Print recognized words for debugging
 
           // Check for 'checkout' command
-          if (recognizedWords.contains("checkout")) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Checkout command received")),
-            ); // Show snackbar for feedback
+          if (recognizedWords.contains("check out")) {
+            print('checkout command');
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   // const SnackBar(content: Text("Checkout command received")),
+            // ); // Show snackbar for feedback
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -158,7 +159,7 @@ class _CartPageState extends State<CartPage> {
                           // Use fallback values for price and totalPrice if they are null
                           int quantity = item['quantity'] as int? ?? 1; // Default to 1 if null
                           double price = (item['price'] as double?) ?? 0.0; // Default to 0.0 if null
-                          double totalPrice = (item['totalPrice'] as double?) ?? 0.0; // Default to 0.0 if null
+                          double totalPrice = price * quantity;// Default to 0.0 if null
 
                           return DataRow(cells: [
                             DataCell(Text(itemName)),
