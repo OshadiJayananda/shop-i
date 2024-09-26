@@ -26,7 +26,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               TextField(
                 controller: itemNameController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: "Item Name",
                   border: OutlineInputBorder(),
                 ),
@@ -34,7 +34,7 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: 10),
               TextField(
                 controller: priceController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: "Price",
                   border: OutlineInputBorder(),
                 ),
@@ -72,7 +72,7 @@ class _HomePageState extends State<HomePage> {
                     print("Please enter both item name and price");
                   }
                 },
-                child: Text("Add Data"),
+                child: const Text("Add Data"),
               ),
             ],
           ),
