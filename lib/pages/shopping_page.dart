@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt; // Import the speech_to_text package
-import 'cart_page.dart'; // Import the CartPage
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
+import 'cart_page.dart'; // Import CartPage
 
 class ShoppingPage extends StatefulWidget {
   const ShoppingPage({super.key});
@@ -11,261 +12,336 @@ class ShoppingPage extends StatefulWidget {
 }
 
 class _ShoppingPageState extends State<ShoppingPage> {
-  final _database = FirebaseDatabase.instance.ref();
-  List<Map<String, dynamic>> items = [];
-  Map<String, int> cartItems = {}; // To store itemName and quantity
-  int cartCount = 0; // Tracks number of items in cart
+  final DatabaseReference _productRef = FirebaseDatabase.instance.ref().child('products');
+  final DatabaseReference _cartRef = FirebaseDatabase.instance.ref().child('cart');
+  late stt.SpeechToText _speech;
+  late FlutterTts _flutterTts;
 
-  late stt.SpeechToText _speech; // Speech recognition object
+  Map<String, dynamic> products = {};
+  Map<String, Map<String, dynamic>> cartItems = {};
+  int _cartItemCount = 0;
   bool _isListening = false;
   String _lastCommand = '';
+
+  String sanitizeKey(String key) {
+    return key.replaceAll(' ', '').replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '');
+  }
 
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
-    _activateListeners();
+    _flutterTts = FlutterTts();
+    _initializeSpeechRecognition();
+    _fetchProducts();
   }
 
-  void _activateListeners() {
-    _database.child("items").onValue.listen((event) {
-      final data = Map<String, dynamic>.from(event.snapshot.value as Map);
-      final List<Map<String, dynamic>> fetchedItems = [];
+  Future<void> _initializeSpeechRecognition() async {
+    bool available = await _speech.initialize();
+    if (!available) {
+      await _speak("Speech recognition is not available.");
+    }
+  }
+
+  Future<void> _fetchProducts() async {
+    DataSnapshot snapshot = await _productRef.get();
+    if (snapshot.value is Map) {
+      final data = snapshot.value as Map;
+      final fetchedProducts = <String, Map<String, dynamic>>{};
 
       data.forEach((key, value) {
-        fetchedItems.add({
-          'itemName': value['itemName'],
-          'price': value['price'],
-        });
+        final itemData = Map<String, dynamic>.from(value);
+        final itemName = itemData['Product Name'] as String?;
+        final price = itemData['Price'] != null ? double.tryParse(itemData['Price'].toString()) : 0.0;
+
+        if (itemName != null) {
+          fetchedProducts[itemName.toLowerCase()] = {'Price': price};
+        } else {
+          print("Product Name is missing for key: $key");
+        }
       });
 
       setState(() {
-        items = fetchedItems;
+        products = fetchedProducts;
       });
-    });
+
+      print("Fetched products: $products");
+    }
   }
 
-  void _addToCart(String itemName, [int quantity = 1]) {
+  void _updateCartCount() {
+    int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
     setState(() {
-      cartItems[itemName] = cartItems.containsKey(itemName)
-          ? cartItems[itemName]! + quantity
-          : quantity;
-      cartCount = cartItems.length;
+      _cartItemCount = count;
     });
   }
 
-  void _increaseQuantity(String itemName) {
-    setState(() {
-      cartItems[itemName] = cartItems[itemName]! + 1;
-    });
-  }
-
-  void _decreaseQuantity(String itemName) {
-    setState(() {
-      if (cartItems[itemName]! > 1) {
-        cartItems[itemName] = cartItems[itemName]! - 1;
-      } else {
-        cartItems.remove(itemName); // Remove item from cart if quantity is 0
-        cartCount = cartItems.length;
-      }
-    });
-  }
-
-  Future<void> _saveCartToDatabase() async {
-    final cartRef = _database.child("cart");
+  Future<void> _startListening() async {
+    if (_isListening) return; // Prevent starting if already listening
 
     try {
-      await cartRef.remove(); // Clear existing cart data
+      bool available = await _speech.initialize(
+        onStatus: (status) => print('Status: $status'),
+        onError: (error) => print('Error: $error'),
+      );
 
-      cartItems.forEach((itemName, quantity) async {
-        final itemData = items.firstWhere((item) => item['itemName'] == itemName);
-        final price = itemData['price'];
-
-        await cartRef.push().set({
-          'itemName': itemName,
-          'price': price,
-          'quantity': quantity,
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(onResult: (val) {
+          if (!mounted) return;
+          setState(() {
+            _lastCommand = val.recognizedWords.toLowerCase();
+            print("Voice command recognized: $_lastCommand");
+            _processVoiceCommand(_lastCommand);
+          });
         });
-      });
-
-      print("Cart items saved to Firebase successfully.");
+      } else {
+        print("Speech recognition is not available.");
+      }
     } catch (e) {
-      print("Error saving cart to Firebase: $e");
+      print("Error starting speech recognition: $e");
     }
-  }
-
-  void _startListening() async {
-    bool available = await _speech.initialize(
-      onStatus: (status) => print('Status: $status'),
-      onError: (error) => print('Error: $error'),
-    );
-    if (available) {
-      setState(() => _isListening = true);
-      _speech.listen(onResult: (val) {
-        setState(() {
-          _lastCommand = val.recognizedWords.toLowerCase();
-          _processVoiceCommand(_lastCommand); // Process the voice command
-        });
-      });
-    }
-  }
-
-  void _stopListening() {
-    setState(() => _isListening = false);
-    _speech.stop();
   }
 
   void _processVoiceCommand(String command) {
-    final addCommand = RegExp(r'add (\w+) to the cart');
-    final match = addCommand.firstMatch(command);
+    print("Processing voice command: $command");
+    bool itemFound = false;
 
-    if (match != null) {
-      final itemName = match.group(1);
-      final itemExists = items.any((item) => item['itemName'].toLowerCase() == itemName);
+    // Check for quantity in voice command, default to 1
+    RegExp quantityPattern = RegExp(r'(\d+)\s+');
+    int quantity = 1;
+    if (quantityPattern.hasMatch(command)) {
+      quantity = int.tryParse(quantityPattern.firstMatch(command)!.group(1)!) ?? 1;
+    }
 
-      if (itemExists) {
-        _addToCart(itemName!); // Add the item to the cart if it exists
-        print("$itemName added to cart via voice command.");
-      } else {
-        _showMessage("Item not available");
-        print("Item not available in the database.");
+    if (command.contains("show cart")) {
+      _handleShowCartCommand();
+      return;
+    }
+
+    // Iterate over product list to match the command with item names
+    products.forEach((itemName, details) {
+      print("Checking if command contains product: $itemName");
+      if (command.contains(itemName)) {
+        _addToCart(itemName, quantity);
+        print("$itemName added to cart via voice command with quantity: $quantity.");
+        itemFound = true;
+        return;
       }
+    });
+
+    if (!itemFound) {
+      print("Item not found in the product list.");
+      _speak("Item not available");
+    } else {
+      _speak("$quantity item(s) added to cart.");
     }
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-      ),
+  Future<void> _handleShowCartCommand() async {
+    if (cartItems.isEmpty) {
+      await _speak("Your cart is empty");
+      print("Cart is empty.");
+
+
+    } else {
+
+      // Clear the existing cart in the database
+    await _cartRef.remove();
+    print("Existing cart items cleared from the database.");
+
+
+
+      for (var entry in cartItems.entries) {
+        String itemName = entry.key;
+        Map<String, dynamic> itemData = entry.value;
+        String sanitizedKey = sanitizeKey(itemName);
+
+        print("Adding $itemName to the cart database with quantity ${itemData['quantity']}");
+
+        await _cartRef.child(sanitizedKey).set({
+          'itemName': itemName,
+          'quantity': itemData['quantity'],
+          'price': itemData['price'],
+          'totalPrice': itemData['totalPrice'],
+        });
+      }
+
+      await _speak("Navigating to your cart");
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CartPage(cartItems: cartItems),
+        ),
+      );
+    }
+  }
+
+  void _addToCart(String itemName, [int quantity = 1]) {
+    final price = products[itemName]?['Price'] ?? 0.0;
+
+    setState(() {
+      if (cartItems.containsKey(itemName)) {
+        cartItems[itemName]!['quantity'] += quantity;
+        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity']; // Recalculate totalPrice
+
+      } else {
+        cartItems[itemName] = {
+          'price': price,
+          'quantity': quantity,
+          'totalPrice': price * quantity,
+        };
+      }
+      _updateCartCount();
+    });
+    print("Added $quantity of $itemName to the cart. Cart now: $cartItems");
+  }
+
+  void _stopListening() async {
+    if (!_isListening) return;
+
+    await _speech.stop();
+    setState(() {
+      _isListening = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _stopListening();
+    super.dispose();
+  }
+
+  Future<void> _speak(String message) async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() {
+        _isListening = false;
+      });
+    }
+
+    await _flutterTts.speak(message);
+    print("TTS Message: $message");
+  }
+
+  Widget _buildItemList() {
+    if (products.isEmpty) {
+      return const Center(child: CircularProgressIndicator()); // Show a loading indicator while fetching
+    }
+
+    return ListView.builder(
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        String itemName = products.keys.elementAt(index);
+        double price = products[itemName]['Price'];
+
+        return ListTile(
+          title: Text(itemName),
+          subtitle: Text('Price: \$${price.toStringAsFixed(2)}'),
+          trailing: IconButton(
+            icon: const Icon(Icons.add_shopping_cart),
+            onPressed: () {
+              _handleAddCommand('get 1 $itemName'); // Quick test
+            },
+          ),
+        );
+      },
     );
+  }
+
+  Future<void> _handleAddCommand(String command) async {
+    print("Handling add command: $command");
+
+    final itemNameRegex = RegExp(r'get\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(.*)', caseSensitive: false);
+    final match = itemNameRegex.firstMatch(command);
+
+    if (match != null) {
+      String quantityText = match.group(1)?.trim() ?? "1";
+      int quantity = _convertWordToNumber(quantityText);
+      String itemName = match.group(2)!.trim().toLowerCase();
+
+      await _speak('I recognized: $quantity $itemName.');
+
+      if (products.containsKey(itemName)) {
+        double price = products[itemName]['Price'];
+        double totalPrice = price * quantity;
+
+        setState(() {
+          if (cartItems.containsKey(itemName)) {
+            cartItems[itemName]!['quantity'] += quantity;
+             cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity'];
+          } else {
+            cartItems[itemName] = {
+              'price': price,
+              'quantity': quantity,
+              'totalPrice': totalPrice,
+            };
+          }
+          _updateCartCount();
+        });
+
+        String sanitizedKey = sanitizeKey(itemName);
+        await _cartRef.child(sanitizedKey).set({
+          'itemName': itemName,
+          'quantity': cartItems[itemName]!['quantity'],
+          'price': price,
+          'totalPrice': cartItems[itemName]!['totalPrice'] ,
+        });
+
+        print("Added $itemName to cart with quantity: $quantity");
+        await _speak("$quantity $itemName added to cart.");
+      } else {
+        print("Item not found: $itemName");
+        await _speak("Sorry, $itemName is not available.");
+      }
+    } else {
+      print("Invalid command format: $command");
+      await _speak("I didn't understand the command.");
+    }
+  }
+
+  int _convertWordToNumber(String word) {
+    Map<String, int> wordToNumber = {
+      'one': 1,
+      'two': 2,
+      'three': 3,
+      'four': 4,
+      'five': 5,
+      'six': 6,
+      'seven': 7,
+      'eight': 8,
+      'nine': 9,
+      'ten': 10,
+    };
+
+    return wordToNumber[word.toLowerCase()] ?? int.tryParse(word) ?? 1;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Shopping"),
+        title: const Text('Shopping Page'),
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart),
-                onPressed: () {
-                  _saveCartToDatabase(); // Save cart items to Firebase
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const CartPage()),
-                  );
-                },
-              ),
-              if (cartCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 18,
-                      minHeight: 18,
-                    ),
-                    child: Text(
-                      '$cartCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.shopping_cart),
+            onPressed: () {
+              _handleShowCartCommand(); // Directly show the cart page
+            },
           ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(15.0),
-            child: items.isNotEmpty
-                ? Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3, // 3 columns
-                  crossAxisSpacing: 10,
-                  mainAxisSpacing: 10,
-                  childAspectRatio: 0.8,
-                ),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final itemName = items[index]['itemName'];
-                  final itemPrice = items[index]['price'];
-
-                  return Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            itemName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text("Price: $itemPrice"),
-                          const Spacer(),
-                          cartItems.containsKey(itemName)
-                              ? Row(
-                            mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
-                            children: [
-                              IconButton(
-                                onPressed: () {
-                                  _decreaseQuantity(itemName);
-                                },
-                                icon: const Icon(Icons.remove),
-                              ),
-                              Text(cartItems[itemName].toString()),
-                              IconButton(
-                                onPressed: () {
-                                  _increaseQuantity(itemName);
-                                },
-                                icon: const Icon(Icons.add),
-                              ),
-                            ],
-                          )
-                              : ElevatedButton(
-                            onPressed: () {
-                              _addToCart(itemName);
-                              print('$itemName added to cart');
-                            },
-                            child: const Text("Add to Cart"),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
+          if (_isListening)
+            IconButton(
+              icon: const Icon(Icons.mic),
+              onPressed: _stopListening,
             )
-                : const Text("No items available"),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: _isListening ? _stopListening : _startListening,
-            child: Text(_isListening ? 'Stop Listening' : 'Start Voice Command'),
-          ),
+          else
+            IconButton(
+              icon: const Icon(Icons.mic_none),
+              onPressed: _startListening,
+            ),
         ],
       ),
+      body: _buildItemList(),
     );
   }
 }

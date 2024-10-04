@@ -3,7 +3,8 @@ import 'package:demo_app/pages/profile_page.dart';
 import 'package:demo_app/pages/settings_page.dart';
 import 'package:demo_app/pages/shopping_page.dart';
 import 'package:demo_app/pages/shopping_list.dart';
-import 'package:demo_app/pages/Barcode_scanner.dart';// Import the BarcodeScanner page
+// import 'package:demo_app/pages/Barcode_scanner.dart'; // Import the BarcodeScanner page
+import 'package:demo_app/pages/camera_page.dart';
 import 'package:flutter/material.dart';
 
 class MainPage extends StatefulWidget {
@@ -17,8 +18,9 @@ class _MainPageState extends State<MainPage> {
   final List<Widget> pages = [
     const HomePage(),
     const ShoppingPage(),
-    const Voicepage(),
-    const BarcodeScanner(), // Ensure BarcodeScanner is listed here
+
+    // Ensure BarcodeScanner is listed here
+    const CameraPage(),
     const ProfilePage(),
     const SettingsPage(),
   ];
@@ -36,11 +38,13 @@ class _MainPageState extends State<MainPage> {
             currentPage = value;
           });
         },
-        selectedItemColor: Colors.black,
+        selectedItemColor: Colors.black, // For selected item color
         unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
+            icon: Icon(
+              Icons.home,
+            ),
             label: "Home",
           ),
           BottomNavigationBarItem(
@@ -48,19 +52,17 @@ class _MainPageState extends State<MainPage> {
             label: "Shopping",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.list),
-            label: "Shoppinglist",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.qr_code_scanner),
-            label: "Barcode Scanner",
+            icon: Icon(Icons.camera),
+            label: "Camera",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: "Profile",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
+            icon: Icon(
+              Icons.settings,
+            ),
             label: "Settings",
           ),
         ],
