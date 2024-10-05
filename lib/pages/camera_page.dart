@@ -2,11 +2,9 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter_gemini/flutter_gemini.dart' as gemini;
+import 'package:firebase_database/firebase_database.dart'; // Import Firebase Realtime Database
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:demo_app/consts.dart';
@@ -18,21 +16,14 @@ class CameraPage extends StatefulWidget {
   State<CameraPage> createState() => _CameraPageState();
 }
 
-extension StringComparison on String {
-  bool equalsIgnoreCase(String other) {
-    return this.toLowerCase() == other.toLowerCase();
-  }
-}
-
 class _CameraPageState extends State<CameraPage> {
-  final _database = FirebaseDatabase.instance.ref();
   late CameraController _controller;
   late Future<void> _initializeControllerFuture;
   XFile? _imageFile;
   bool _isCapturing = false;
   bool isImageCaptured = false;
   bool _isLoading = false;
-  late FlutterTts flutterTts;
+  late FlutterTts flutterTts; // TTS instance
 
   // Firebase database references
   final DatabaseReference shoppingListRef =
@@ -64,66 +55,17 @@ class _CameraPageState extends State<CameraPage> {
     });
   }
 
-  Future<void> matchProducts(String scannedText, List<String> productNames,
-      BuildContext context) async {
-    final apiKey = GEMINI_API_KEY;
-
-    final model = GenerativeModel(
-      model: 'gemini-1.5-flash',
-      apiKey: apiKey,
-      generationConfig: GenerationConfig(
-        temperature: 1,
-        topK: 64,
-        topP: 0.95,
-        maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
-      ),
-      systemInstruction: Content.system(
-          'Only match the product names from the provided list. Do not infer or generate new product names.'),
-    );
-
-    final chat = model.startChat(history: []);
-
-    // Prepare the product list in a readable format
-    final productDescriptions = productNames.map((name) {
-      return 'Product Name: $name';
-    }).join('\n');
-
-    final inputMessage = 'Find matching products from the following list:\n'
-        '$productDescriptions\n\nScanned Text: $scannedText';
-
-    final content = Content.text(inputMessage);
-    final response = await chat.sendMessage(content);
-
-    print("Matching result: ${response.text}");
-
-    final productNameFromGemini =
-        response.text?.trim(); // Extracted from Gemini response
-
-    // Ensure that productNameFromGemini is not null or empty before comparing
-    final isProductInInventory = productNames.any((productName) {
-      final normalizedProductNameFromGemini =
-          productNameFromGemini?.trim() ?? '';
-
-      return normalizedProductNameFromGemini.isNotEmpty &&
-          productName.equalsIgnoreCase(normalizedProductNameFromGemini);
-    });
-
-    String resultMessage = isProductInInventory
-        ? 'Product is available in the inventory!'
-        : 'Product is NOT available in the inventory.';
-
-    showDialog(
+  Future<void> showCustomDialog(
+      BuildContext context, String title, String content) {
+    return showDialog<void>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Matching result'),
-          content: SingleChildScrollView(
-            child: Text('${response.text} \n\n $resultMessage'),
-          ),
-          actions: <Widget>[
+          title: Text(title),
+          content: Text(content),
+          actions: [
             TextButton(
-              child: Text('OK'),
+              child: const Text("OK"),
               onPressed: () {
                 Navigator.of(context).pop();
               },
@@ -141,12 +83,14 @@ class _CameraPageState extends State<CameraPage> {
       Map<dynamic, dynamic> shoppingList =
           snapshot.value as Map<dynamic, dynamic>;
 
+      // Check if the item name is in the shopping list
+      // string itemFound = shoppingList.containsValue(itemName.toLowerCase());
+      // return itemFound;
       for (var entry in shoppingList.entries) {
-        Map<dynamic, dynamic> itemFound =
-            entry.value as Map<dynamic, dynamic>;
+        Map<dynamic, dynamic> itemFound = entry.value as Map<dynamic, dynamic>;
         if (itemFound['item'].toLowerCase() == itemName.toLowerCase()) {
           // Return formatted promotion string
-          return "There is an ongoing ${itemFound['promotion']} promotion for ${itemFound['item']} from ${itemFound['brand']} until ${itemFound['duration']}.";
+          return "This ${itemFound['item']} item is on the shopping list.";
         }
       }
     }
@@ -214,23 +158,6 @@ class _CameraPageState extends State<CameraPage> {
         String? productName;
         if (jsonResponse.containsKey('product_name')) {
           productName = jsonResponse['product_name'];
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                title: Text('Product Found'),
-                content: Text('Product Name: $productName'),
-                actions: <Widget>[
-                  TextButton(
-                    child: Text('OK'),
-                    onPressed: () {
-                      Navigator.of(context).pop(); // Close the dialog
-                    },
-                  ),
-                ],
-              );
-            },
-          );
           print('Product Name: $productName');
         } else {
           print('Product name not found in response.');
@@ -246,7 +173,6 @@ class _CameraPageState extends State<CameraPage> {
           if (ItemInShoppingList != null) {
             isItemInShoppingList = true;
           }
-
           // Check if there is any promotion for this item
           String? promotionDetails = await checkPromotionsForItem(productName);
 
@@ -273,180 +199,166 @@ class _CameraPageState extends State<CameraPage> {
           // Handle case where no product name is found
           const $title = "No Match Found";
           const $content =
-              "Could not match any product name. Please try again.";
+              "Could not match any brand or product from the scanned text.";
           showCustomDialog(context, $title, $content);
+
+          // Speak the "no match" result
+          _speakText("Could not match any brand or product.");
         }
       } else {
-        const $title = "Error";
-        const $content = "Failed to analyze the image. Please try again.";
+        const $title = "No Match Found";
+        const $content =
+            "Could not match any brand or product from the scanned text.";
         showCustomDialog(context, $title, $content);
+
+        // Speak the "no match" result
+        _speakText("Could not match any brand or product.");
       }
-    } catch (e) {
-      const $title = "Error";
-      const $content = "An error occurred while processing: $e";
-      showCustomDialog(context, $title, $content);
+    } catch (error) {
+      print('Error occurred: $error');
     } finally {
       setState(() {
-        _isLoading = false; // Stop loading indicator
+        _isLoading = false;
       });
     }
   }
 
-  Future<void> _analyzeImage(BuildContext context) async {
-    if (_imageFile == null) return;
+  void _analyzeImage(BuildContext context) async {
+    if (_imageFile != null) {
+      try {
+        final inputImage = InputImage.fromFilePath(_imageFile!.path);
+        final textRecognizer = GoogleMlKit.vision.textRecognizer();
+        final RecognizedText recognizedText =
+            await textRecognizer.processImage(inputImage);
 
-    setState(() {
-      _isLoading = true; // Start loading
-    });
+        final text = recognizedText.text.trim();
 
-    try {
-      final inputImage = InputImage.fromFilePath(_imageFile!.path);
-      final textDetector = GoogleMlKit.vision.textDetector();
-      final RecognizedText recognizedText =
-          await textDetector.processImage(inputImage);
-      final String scannedText = recognizedText.text;
-
-      // Check if there's any recognized text
-      if (scannedText.isNotEmpty) {
-        // Now extract the brand name
-        await extractBrand(scannedText, context);
-      } else {
-        showCustomDialog(context, 'No Text Found',
-            'No text could be recognized from the image.');
+        if (text.isEmpty) {
+          throw Exception("No text recognized in the image.");
+        }
+        const $title = 'Scanned Text';
+        final $content = text;
+        extractBrand(text, context);
+        textRecognizer.close();
+      } catch (e) {
+        print('Error analyzing image: $e');
+        const $title = 'Error';
+        final $content = 'Error analyzing image: $e';
+        showCustomDialog(context, $title, $content);
+        _speakText('Error analyzing image');
       }
-    } catch (e) {
-      showCustomDialog(context, 'Error', 'Failed to analyze the image: $e');
-    } finally {
-      setState(() {
-        _isLoading = false; // Stop loading
-      });
-    }
-  }
-
-  Future<void> _takePicture() async {
-    if (_isCapturing) return;
-    _isCapturing = true;
-
-    try {
-      await _initializeControllerFuture;
-      final XFile picture = await _controller.takePicture();
-
-      setState(() {
-        _imageFile = picture; // Save the image file
-        isImageCaptured = true; // Image has been captured
-      });
-    } catch (e) {
-      print('Error capturing picture: $e');
-    } finally {
-      _isCapturing = false;
     }
   }
 
   Future<void> _initializeCamera() async {
-    // Obtain a list of the available cameras on the device.
-    final cameras = await availableCameras();
-    // Get a specific camera from the list of available cameras.
-    final firstCamera = cameras.first;
-
-    _controller = CameraController(
-      firstCamera,
-      ResolutionPreset.medium,
-    );
-
-    // Initialize the controller.
-    _initializeControllerFuture = _controller.initialize();
+    try {
+      final cameras = await availableCameras();
+      _controller = CameraController(
+        cameras[0],
+        ResolutionPreset.high,
+      );
+      _initializeControllerFuture = _controller.initialize();
+      setState(() {});
+    } on CameraException catch (e) {
+      print('CameraException: ${e.code}\nError Message: ${e.description}');
+    } catch (e) {
+      print('Error initializing camera: $e');
+    }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    flutterTts.stop(); // Stop any speech on dispose
     super.dispose();
+  }
+
+  Future<void> _takePicture() async {
+    if (_isCapturing) return;
+    setState(() {
+      _isCapturing = true;
+    });
+
+    try {
+      await _initializeControllerFuture;
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final XFile file = await _controller.takePicture();
+      file.saveTo(path);
+      setState(() {
+        _imageFile = file;
+      });
+    } catch (e) {
+      print(e);
+    } finally {
+      setState(() {
+        _isCapturing = false;
+        isImageCaptured = true;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Camera Page'),
+        title: const Text('Camera'),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          FutureBuilder<void>(
-            future: _initializeControllerFuture,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.done) {
-                // If the Future is complete, display the preview.
-                return SizedBox(
-                  height: 300,
-                  child: CameraPreview(_controller),
-                );
-              } else {
-                // Otherwise, display a loading indicator.
-                return const Center(child: CircularProgressIndicator());
-              }
-            },
+          Column(
+            children: [
+              if (_imageFile == null)
+                Expanded(
+                  child: FutureBuilder<void>(
+                    future: _initializeControllerFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.done) {
+                        return Center(child: CameraPreview(_controller));
+                      } else if (snapshot.hasError) {
+                        return Center(child: Text('Error: ${snapshot.error}'));
+                      } else {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                    },
+                  ),
+                )
+              else
+                Expanded(
+                  child: Center(
+                    child: Image.file(File(_imageFile!.path)),
+                  ),
+                ),
+              const SizedBox(height: 10),
+              isImageCaptured
+                  ? ElevatedButton(
+                      onPressed: () => _analyzeImage(context),
+                      child: const Text('Analyze Image'))
+                  : ElevatedButton(
+                      onPressed: _takePicture,
+                      child: _isCapturing
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : const Text('Capture Image'),
+                    ),
+              if (isImageCaptured)
+                ElevatedButton(
+                  onPressed: _retakePicture,
+                  child: const Text('Retake'),
+                ),
+            ],
           ),
-          const SizedBox(height: 20),
-          if (isImageCaptured && _imageFile != null)
-            Expanded(
-              child: Column(
-                children: [
-                  Image.file(
-                    File(_imageFile!.path),
-                    fit: BoxFit.cover,
-                    height: 300,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton(
-                        onPressed: _retakePicture,
-                        child: const Text('Retake Picture'),
-                      ),
-                      const SizedBox(width: 20),
-                      ElevatedButton(
-                        onPressed: () {
-                          _analyzeImage(context);
-                        },
-                        child: const Text('Analyze Image'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
           if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
+            Container(
+              color: Colors.black.withOpacity(0.5),
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _takePicture,
-        tooltip: 'Take Picture',
-        child: const Icon(Icons.camera_alt),
-      ),
-    );
-  }
-
-  void showCustomDialog(BuildContext context, String title, String content) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(content),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('OK'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        );
-      },
     );
   }
 }
