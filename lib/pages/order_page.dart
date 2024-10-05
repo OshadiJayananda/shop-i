@@ -1,3 +1,4 @@
+import 'package:demo_app/pages/card_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -146,15 +147,19 @@ void _doPayment() {
   if (paymentMethod == 'Cash') {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => CashPage(totalAmount: totalAmount)), // Pass the totalAmount here
+      MaterialPageRoute(builder: (context) => CashPage(totalAmount: totalAmount)),
     );
+  } else if (paymentMethod == 'Card') {
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(builder: (context) => CardPage(totalAmount: totalAmount)),
+    // );
   } else {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Payment of \$${totalAmount.toStringAsFixed(2)} via $paymentMethod'),
+      content: Text('Please select a payment method.'),
     ));
   }
 }
-
 
   @override
   Widget build(BuildContext context) {

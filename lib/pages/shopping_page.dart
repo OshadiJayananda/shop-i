@@ -103,40 +103,56 @@ class _ShoppingPageState extends State<ShoppingPage> {
     }
   }
 
-  void _processVoiceCommand(String command) {
-    print("Processing voice command: $command");
-    bool itemFound = false;
+void _processVoiceCommand(String command) {
+  print("Processing voice command: $command");
+  bool itemFound = false;
 
-    // Check for quantity in voice command, default to 1
-    RegExp quantityPattern = RegExp(r'(\d+)\s+');
-    int quantity = 1;
-    if (quantityPattern.hasMatch(command)) {
-      quantity = int.tryParse(quantityPattern.firstMatch(command)!.group(1)!) ?? 1;
+  // Check for "get <quantity> <itemName>" format, default to quantity 1 if not specified
+  RegExp commandPattern = RegExp(r'get\s*(\d+)?\s*(.*)', caseSensitive: false); // Adjusted to 'get' format
+  int quantity = 1; // Default quantity is 1 if none provided
+
+  final match = commandPattern.firstMatch(command);
+
+  if (match != null) {
+    // Extract the quantity if specified, else default to 1
+    if (match.group(1) != null) {
+      quantity = int.parse(match.group(1)!); // Use the captured quantity
     }
+    
+    // Extract the item name
+    String itemName = match.group(2)?.toLowerCase() ?? '';
 
+    // Check if the command is to show the cart
     if (command.contains("show cart")) {
       _handleShowCartCommand();
       return;
     }
 
-    // Iterate over product list to match the command with item names
-    products.forEach((itemName, details) {
-      print("Checking if command contains product: $itemName");
-      if (command.contains(itemName)) {
-        _addToCart(itemName, quantity);
-        print("$itemName added to cart via voice command with quantity: $quantity.");
+    // Search for the item in the products list
+    products.forEach((productName, details) {
+      if (itemName.contains(productName)) {
+        _addToCart(productName, quantity); // Add the item with specified quantity
+        print("$productName added to cart via voice command with quantity: $quantity.");
         itemFound = true;
         return;
       }
     });
 
     if (!itemFound) {
+      // If no product matches the given name
       print("Item not found in the product list.");
       _speak("Item not available");
     } else {
+      // Confirm the addition of the item(s) to the cart
       _speak("$quantity item(s) added to cart.");
     }
+  } else {
+    // If the voice command does not match the expected format
+    _speak("Command not recognized. Please say 'get <quantity> <item>'");
   }
+}
+
+
 
   Future<void> _handleShowCartCommand() async {
     if (cartItems.isEmpty) {
