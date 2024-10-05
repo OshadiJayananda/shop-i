@@ -12,156 +12,280 @@ class ShoppingPage extends StatefulWidget {
 }
 
 class _ShoppingPageState extends State<ShoppingPage> {
-  final DatabaseReference _itemRef = FirebaseDatabase.instance.ref().child('items');
+  final DatabaseReference _productRef = FirebaseDatabase.instance.ref().child('products');
   final DatabaseReference _cartRef = FirebaseDatabase.instance.ref().child('cart');
   late stt.SpeechToText _speech;
   late FlutterTts _flutterTts;
 
-  Map<String, dynamic> items = {}; // For holding fetched items
-  // Map<String, Map<String, dynamic>> cart = {}; // Cart items with price and total price
-Map<String, Map<String, dynamic>> cartItems = {};
+  Map<String, dynamic> products = {};
+  Map<String, Map<String, dynamic>> cartItems = {};
+  int _cartItemCount = 0;
+  bool _isListening = false;
+  String _lastCommand = '';
 
-  int _cartItemCount = 0; 
-  bool _isListening = false; // To track the listening state
+  String sanitizeKey(String key) {
+    return key.replaceAll(' ', '').replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '');
+  }
 
   @override
   void initState() {
     super.initState();
     _speech = stt.SpeechToText();
     _flutterTts = FlutterTts();
-    _fetchItems();
-    _initSpeechRecognition();
+    _initializeSpeechRecognition();
+    _fetchProducts();
   }
 
-  // Fetch items from the Firebase database
-  Future<void> _fetchItems() async {
-    DataSnapshot snapshot = await _itemRef.get();
-    print("Fetched items: ${snapshot.value}");
+  Future<void> _initializeSpeechRecognition() async {
+    bool available = await _speech.initialize();
+    if (!available) {
+      await _speak("Speech recognition is not available.");
+    }
+  }
+
+  Future<void> _fetchProducts() async {
+    DataSnapshot snapshot = await _productRef.get();
     if (snapshot.value is Map) {
       final data = snapshot.value as Map;
-      final fetchedItems = <String, Map<String, dynamic>>{};
+      final fetchedProducts = <String, Map<String, dynamic>>{};
+
       data.forEach((key, value) {
         final itemData = Map<String, dynamic>.from(value);
-        final itemName = itemData['itemName'] as String;
-        final price = itemData['price'] as double;
-        fetchedItems[itemName.toLowerCase()] = {'price': price};
+        final itemName = itemData['Product Name'] as String?;
+        final price = itemData['Price'] != null ? double.tryParse(itemData['Price'].toString()) : 0.0;
+
+        if (itemName != null) {
+          fetchedProducts[itemName.toLowerCase()] = {'Price': price};
+        } else {
+          print("Product Name is missing for key: $key");
+        }
       });
+
       setState(() {
-        items = fetchedItems;
+        products = fetchedProducts;
       });
+
+      print("Fetched products: $products");
     }
   }
 
-
-  // Update cart item count
-void _updateCartCount() {
-int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
-  setState(() {
-    _cartItemCount = count;
-  });
-}
-
-
-  // Initialize speech recognition
-  void _initSpeechRecognition() async {
-    bool available = await _speech.initialize();
-    if (available) {
-      setState(() {
-        _startListening();
-      });
-    } else {
-      print('Speech recognition is not available');
-    }
-  }
-
-  // Start listening for voice commands
-void _startListening() async {
-  if (_isListening) return;
-
-  try {
-    await _speech.listen(onResult: (result) {
-      String command = result.recognizedWords.toLowerCase().trim();
-      
-      // Print the recognized command for debugging
-      print('Recognized command: $command');
-      
-      // Check if key words 'show' and 'cart' are in the command
-      if (_containsKeywords(command, ['show', 'cart'])) {
-        print('Detected "show cart" command'); // Debugging print
-        _handleShowCartCommand();
-      } else if (_containsKeywords(command, ['add', 'cart'])) {
-        print('Detected "add to cart" command'); // Debugging print
-        _handleAddCommand(command);
-
-      } else {
-        print('Unrecognized command'); // Debugging print
-      }
-    });
+  void _updateCartCount() {
+    int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
     setState(() {
-      _isListening = true;
+      _cartItemCount = count;
     });
-  } catch (e) {
-    print('Error starting speech recognition: $e');
   }
-}
 
-
-
-// Helper function to check for keywords in the command
-bool _containsKeywords(String command, List<String> keywords) {
-  for (String keyword in keywords) {
-    if (!command.contains(keyword)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-
-
-
-
-
-  // Stop listening
-  void _stopListening() async {
-    if (!_isListening) return; // Avoid stopping if not listening
+  Future<void> _startListening() async {
+    if (_isListening) return; // Prevent starting if already listening
 
     try {
-      await _speech.stop();
-      setState(() {
-        _isListening = false;
-      });
+      bool available = await _speech.initialize(
+        onStatus: (status) => print('Status: $status'),
+        onError: (error) => print('Error: $error'),
+      );
+
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(onResult: (val) {
+          if (!mounted) return;
+          setState(() {
+            _lastCommand = val.recognizedWords.toLowerCase();
+            print("Voice command recognized: $_lastCommand");
+            _processVoiceCommand(_lastCommand);
+          });
+        });
+      } else {
+        print("Speech recognition is not available.");
+      }
     } catch (e) {
-      print('Error stopping speech recognition: $e');
+      print("Error starting speech recognition: $e");
     }
+  }
+
+void _processVoiceCommand(String command) {
+  print("Processing voice command: $command");
+  bool itemFound = false;
+
+  // Check for "get <quantity> <itemName>" format, default to quantity 1 if not specified
+  RegExp commandPattern = RegExp(r'get\s*(\d+)?\s*(.*)', caseSensitive: false); // Adjusted to 'get' format
+  int quantity = 1; // Default quantity is 1 if none provided
+
+  final match = commandPattern.firstMatch(command);
+
+  if (match != null) {
+    // Extract the quantity if specified, else default to 1
+    if (match.group(1) != null) {
+      quantity = int.parse(match.group(1)!); // Use the captured quantity
+    }
+    
+    // Extract the item name
+    String itemName = match.group(2)?.toLowerCase() ?? '';
+
+    // Check if the command is to show the cart
+    if (command.contains("show cart")) {
+      _handleShowCartCommand();
+      return;
+    }
+
+    // Search for the item in the products list
+    products.forEach((productName, details) {
+      if (itemName.contains(productName)) {
+        _addToCart(productName, quantity); // Add the item with specified quantity
+        print("$productName added to cart via voice command with quantity: $quantity.");
+        itemFound = true;
+        return;
+      }
+    });
+
+    if (!itemFound) {
+      // If no product matches the given name
+      print("Item not found in the product list.");
+      _speak("Item not available");
+    } else {
+      // Confirm the addition of the item(s) to the cart
+      _speak("$quantity item(s) added to cart.");
+    }
+  } else {
+    // If the voice command does not match the expected format
+    _speak("Command not recognized. Please say 'get <quantity> <item>'");
+  }
+}
+
+
+
+  Future<void> _handleShowCartCommand() async {
+    if (cartItems.isEmpty) {
+      await _speak("Your cart is empty");
+      print("Cart is empty.");
+
+
+    } else {
+
+      // Clear the existing cart in the database
+    await _cartRef.remove();
+    print("Existing cart items cleared from the database.");
+
+
+
+      for (var entry in cartItems.entries) {
+        String itemName = entry.key;
+        Map<String, dynamic> itemData = entry.value;
+        String sanitizedKey = sanitizeKey(itemName);
+
+        print("Adding $itemName to the cart database with quantity ${itemData['quantity']}");
+
+        await _cartRef.child(sanitizedKey).set({
+          'itemName': itemName,
+          'quantity': itemData['quantity'],
+          'price': itemData['price'],
+          'totalPrice': itemData['totalPrice'],
+        });
+      }
+
+      await _speak("Navigating to your cart");
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CartPage(cartItems: cartItems),
+        ),
+      );
+    }
+  }
+
+  void _addToCart(String itemName, [int quantity = 1]) {
+    final price = products[itemName]?['Price'] ?? 0.0;
+
+    setState(() {
+      if (cartItems.containsKey(itemName)) {
+        cartItems[itemName]!['quantity'] += quantity;
+        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity']; // Recalculate totalPrice
+
+      } else {
+        cartItems[itemName] = {
+          'price': price,
+          'quantity': quantity,
+          'totalPrice': price * quantity,
+        };
+      }
+      _updateCartCount();
+    });
+    print("Added $quantity of $itemName to the cart. Cart now: $cartItems");
+  }
+
+  void _stopListening() async {
+    if (!_isListening) return;
+
+    await _speech.stop();
+    setState(() {
+      _isListening = false;
+    });
   }
 
   @override
   void dispose() {
-    _stopListening(); // Ensure listening is stopped when widget is disposed
+    _stopListening();
     super.dispose();
   }
 
-  // Handle adding items and quantities to the cart
+  Future<void> _speak(String message) async {
+    if (_isListening) {
+      await _speech.stop();
+      setState(() {
+        _isListening = false;
+      });
+    }
+
+    await _flutterTts.speak(message);
+    print("TTS Message: $message");
+  }
+
+  Widget _buildItemList() {
+    if (products.isEmpty) {
+      return const Center(child: CircularProgressIndicator()); // Show a loading indicator while fetching
+    }
+
+    return ListView.builder(
+      itemCount: products.length,
+      itemBuilder: (context, index) {
+        String itemName = products.keys.elementAt(index);
+        double price = products[itemName]['Price'];
+
+        return ListTile(
+          title: Text(itemName),
+          subtitle: Text('Price: \$${price.toStringAsFixed(2)}'),
+          trailing: IconButton(
+            icon: const Icon(Icons.add_shopping_cart),
+            onPressed: () {
+              _handleAddCommand('get 1 $itemName'); // Quick test
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _handleAddCommand(String command) async {
-    final itemNameRegex = RegExp(r'add (\d+)?\s?(.*?)\s?to the cart', caseSensitive: false);
+    print("Handling add command: $command");
+
+    final itemNameRegex = RegExp(r'get\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(.*)', caseSensitive: false);
     final match = itemNameRegex.firstMatch(command);
 
     if (match != null) {
-      int quantity = match.group(1) != null ? int.parse(match.group(1)!) : 1;
+      String quantityText = match.group(1)?.trim() ?? "1";
+      int quantity = _convertWordToNumber(quantityText);
       String itemName = match.group(2)!.trim().toLowerCase();
 
-      print("Command parsed: itemName = $itemName, quantity = $quantity");
+      await _speak('I recognized: $quantity $itemName.');
 
-      if (items.containsKey(itemName)) {
-        final price = items[itemName]['price'] as double;
-        final totalPrice = price * quantity;
-
+      if (products.containsKey(itemName)) {
+        double price = products[itemName]['Price'];
+        double totalPrice = price * quantity;
 
         setState(() {
           if (cartItems.containsKey(itemName)) {
-            cartItems[itemName]!['quantity'] = (cartItems[itemName]!['quantity'] ?? 0) + quantity;
-            cartItems[itemName]!['totalPrice'] = (cartItems[itemName]!['quantity'] as int) * price;
+            cartItems[itemName]!['quantity'] += quantity;
+             cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity'];
           } else {
             cartItems[itemName] = {
               'price': price,
@@ -169,46 +293,44 @@ bool _containsKeywords(String command, List<String> keywords) {
               'totalPrice': totalPrice,
             };
           }
-          _updateCartCount(); // Update cart item count
+          _updateCartCount();
         });
-await _speak('$quantity $itemName added to the cart');      
-} else {
-    await    _speak('$itemName is not available');
+
+        String sanitizedKey = sanitizeKey(itemName);
+        await _cartRef.child(sanitizedKey).set({
+          'itemName': itemName,
+          'quantity': cartItems[itemName]!['quantity'],
+          'price': price,
+          'totalPrice': cartItems[itemName]!['totalPrice'] ,
+        });
+
+        print("Added $itemName to cart with quantity: $quantity");
+        await _speak("$quantity $itemName added to cart.");
+      } else {
+        print("Item not found: $itemName");
+        await _speak("Sorry, $itemName is not available.");
       }
     } else {
-    await  _speak('Could not understand the command. Please try again.');
+      print("Invalid command format: $command");
+      await _speak("I didn't understand the command.");
     }
   }
 
+  int _convertWordToNumber(String word) {
+    Map<String, int> wordToNumber = {
+      'one': 1,
+      'two': 2,
+      'three': 3,
+      'four': 4,
+      'five': 5,
+      'six': 6,
+      'seven': 7,
+      'eight': 8,
+      'nine': 9,
+      'ten': 10,
+    };
 
-  // Handle navigating to CartPage and saving items to the cart database
-  Future<void> _handleShowCartCommand() async {
-    try {
-      print("Saving cart: $cartItems");
-
-      // Save the cart data to Firebase
-      await _cartRef.set(cartItems);
-
-      await _speak("Navigating to your cart");
-
-      // Ensure the CartPage can handle empty or populated cart
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-builder: (context) => CartPage(cartItems: cartItems),
-        ),
-      );
-       print("Navigation to CartPage successful"); 
-    } catch (e) {
-      print("Error saving cart: $e");
-      _speak("There was an error saving the cart.");
-    }
-  }
-
-  // Text-to-speech feedback
-  Future<void> _speak(String message) async {
-    await _flutterTts.speak(message);
-
+    return wordToNumber[word.toLowerCase()] ?? int.tryParse(word) ?? 1;
   }
 
   @override
@@ -217,54 +339,25 @@ builder: (context) => CartPage(cartItems: cartItems),
       appBar: AppBar(
         title: const Text('Shopping Page'),
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart),
-                onPressed: () {
-                  _handleShowCartCommand(); // Navigate to CartPage when cart icon is clicked
-                },
-              ),
-              if (_cartItemCount > 0)
-                Positioned(
-                  right: 0,
-                  child: CircleAvatar(
-                    radius: 10,
-                    backgroundColor: Colors.red,
-                    child: Text(
-                      _cartItemCount.toString(),
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
-                ),
-            ],
+          IconButton(
+            icon: const Icon(Icons.shopping_cart),
+            onPressed: () {
+              _handleShowCartCommand(); // Directly show the cart page
+            },
           ),
+          if (_isListening)
+            IconButton(
+              icon: const Icon(Icons.mic),
+              onPressed: _stopListening,
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.mic_none),
+              onPressed: _startListening,
+            ),
         ],
       ),
-
       body: _buildItemList(),
-    );
-  }
-
-  Widget _buildItemList() {
-    return ListView.builder(
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        String itemName = items.keys.elementAt(index);
-        String price = items[itemName]['price'].toString();
-
-        return ListTile(
-          title: Text(itemName),
-          subtitle: Text('Price: $price'),
-          trailing: IconButton(
-            icon: const Icon(Icons.add_shopping_cart),
-            onPressed: () {
-              _handleAddCommand('add 1 $itemName to the cart');
-            },
-
-          ),
-        );
-      },
     );
   }
 }

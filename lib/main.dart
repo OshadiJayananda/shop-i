@@ -10,7 +10,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -24,10 +24,10 @@ class MyApp extends StatelessWidget {
       title: 'Flutter Demo',
       theme: ThemeData(
         colorScheme:
-            ColorScheme.fromSeed(seedColor: Color.fromRGBO(30, 88, 41, 1)),
+            ColorScheme.fromSeed(seedColor: const Color.fromRGBO(30, 88, 41, 1)),
         useMaterial3: true,
       ),
-      home: MainPage(),
+      home: const MainPage(),
     );
   }
 }

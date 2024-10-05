@@ -4,7 +4,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class BarcodeScanner extends StatefulWidget {
-  const BarcodeScanner({Key? key}) : super(key: key);
+  const BarcodeScanner({super.key});
 
   @override
   _BarcodeScannerState createState() => _BarcodeScannerState();
@@ -45,12 +45,12 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text("Product Details"),
+          title: const Text("Product Details"),
           content: Text(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text("OK"),
+              child: const Text("OK"),
             ),
           ],
         ),

@@ -18,7 +18,7 @@ class _HomePageState extends State<HomePage> {
     final itemsRef = database.child("/items");
 
     return Scaffold(
-      appBar: AppBar(title: Text("Add Data")),
+      appBar: AppBar(title: const Text("Add Data")),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(15.0),
@@ -31,16 +31,16 @@ class _HomePageState extends State<HomePage> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               TextField(
                 controller: priceController,
                 decoration: InputDecoration(
                   labelText: "Price",
                   border: OutlineInputBorder(),
                 ),
-                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () async {
                   final itemName = itemNameController.text.trim();

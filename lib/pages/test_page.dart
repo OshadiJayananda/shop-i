@@ -11,14 +11,14 @@ class TestPage extends StatefulWidget {
 }
 
 class _TestPageState extends State<TestPage> {
-  Future<FirebaseApp> _fApp = Firebase.initializeApp(
+  final Future<FirebaseApp> _fApp = Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Welcome"),
+        title: const Text("Welcome"),
       ),
       body: FutureBuilder(
         future: _fApp,
@@ -26,11 +26,11 @@ class _TestPageState extends State<TestPage> {
           if (snapshot.hasError) {
             // Log the error to the console
             print("Error: ${snapshot.error}");
-            return Text("Something went wrong");
+            return const Text("Something went wrong");
           } else if (snapshot.connectionState == ConnectionState.done) {
             return content();
           } else {
-            return CircularProgressIndicator();
+            return const CircularProgressIndicator();
           }
         },
       ),
@@ -38,7 +38,7 @@ class _TestPageState extends State<TestPage> {
   }
 
   Widget content() {
-    DatabaseReference _testRef = FirebaseDatabase.instance.ref();
+    DatabaseReference testRef = FirebaseDatabase.instance.ref();
     return Center(
       child: Container(
         child: Column(
@@ -46,9 +46,9 @@ class _TestPageState extends State<TestPage> {
           children: [
             GestureDetector(
               onTap: () async {
-                DatabaseReference _testRef =
+                DatabaseReference testRef =
                     FirebaseDatabase.instance.ref("test");
-                await _testRef.set({"test": "10"}).then((_) {
+                await testRef.set({"test": "10"}).then((_) {
                   print("Data added successfully");
                 }).catchError((error) {
                   print("Failed to add data: $error");
@@ -59,7 +59,7 @@ class _TestPageState extends State<TestPage> {
                 width: 150,
                 decoration: BoxDecoration(
                     color: Colors.blue, borderRadius: BorderRadius.circular(5)),
-                child: Center(
+                child: const Center(
                   child: Text(
                     "Add Data",
                     style: TextStyle(color: Colors.white, fontSize: 20),
@@ -67,19 +67,19 @@ class _TestPageState extends State<TestPage> {
                 ),
               ),
             ),
-            SizedBox(
+            const SizedBox(
               height: 50,
             ),
             GestureDetector(
               onTap: () async {
-                _testRef.child("test").remove();
+                testRef.child("test").remove();
               },
               child: Container(
                 height: 50,
                 width: 150,
                 decoration: BoxDecoration(
                     color: Colors.blue, borderRadius: BorderRadius.circular(5)),
-                child: Center(
+                child: const Center(
                   child: Text(
                     "Remove Data",
                     style: TextStyle(color: Colors.white, fontSize: 20),
@@ -87,7 +87,7 @@ class _TestPageState extends State<TestPage> {
                 ),
               ),
             ),
-            SizedBox(
+            const SizedBox(
               height: 50,
             )
           ],
