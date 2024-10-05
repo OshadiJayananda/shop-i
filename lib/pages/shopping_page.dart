@@ -12,8 +12,10 @@ class ShoppingPage extends StatefulWidget {
 }
 
 class _ShoppingPageState extends State<ShoppingPage> {
-  final DatabaseReference _productRef = FirebaseDatabase.instance.ref().child('products');
-  final DatabaseReference _cartRef = FirebaseDatabase.instance.ref().child('cart');
+  final DatabaseReference _productRef =
+      FirebaseDatabase.instance.ref().child('products');
+  final DatabaseReference _cartRef =
+      FirebaseDatabase.instance.ref().child('cart');
   late stt.SpeechToText _speech;
   late FlutterTts _flutterTts;
 
@@ -52,7 +54,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
       data.forEach((key, value) {
         final itemData = Map<String, dynamic>.from(value);
         final itemName = itemData['Product Name'] as String?;
-        final price = itemData['Price'] != null ? double.tryParse(itemData['Price'].toString()) : 0.0;
+        final price = itemData['Price'] != null
+            ? double.tryParse(itemData['Price'].toString())
+            : 0.0;
 
         if (itemName != null) {
           fetchedProducts[itemName.toLowerCase()] = {'Price': price};
@@ -70,7 +74,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
   }
 
   void _updateCartCount() {
-    int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
+    int count = cartItems.values
+        .fold(0, (prev, item) => prev + (item['quantity'] as int));
     setState(() {
       _cartItemCount = count;
     });
@@ -103,77 +108,74 @@ class _ShoppingPageState extends State<ShoppingPage> {
     }
   }
 
-void _processVoiceCommand(String command) {
-  print("Processing voice command: $command");
-  bool itemFound = false;
+  void _processVoiceCommand(String command) {
+    print("Processing voice command: $command");
+    bool itemFound = false;
 
-  // Check for "get <quantity> <itemName>" format, default to quantity 1 if not specified
-  RegExp commandPattern = RegExp(r'get\s*(\d+)?\s*(.*)', caseSensitive: false); // Adjusted to 'get' format
-  int quantity = 1; // Default quantity is 1 if none provided
+    // Check for "get <quantity> <itemName>" format, default to quantity 1 if not specified
+    RegExp commandPattern = RegExp(r'get\s*(\d+)?\s*(.*)',
+        caseSensitive: false); // Adjusted to 'get' format
+    int quantity = 1; // Default quantity is 1 if none provided
 
-  final match = commandPattern.firstMatch(command);
+    final match = commandPattern.firstMatch(command);
 
-  if (match != null) {
-    // Extract the quantity if specified, else default to 1
-    if (match.group(1) != null) {
-      quantity = int.parse(match.group(1)!); // Use the captured quantity
-    }
-    
-    // Extract the item name
-    String itemName = match.group(2)?.toLowerCase() ?? '';
+    if (match != null) {
+      // Extract the quantity if specified, else default to 1
+      if (match.group(1) != null) {
+        quantity = int.parse(match.group(1)!); // Use the captured quantity
+      }
 
-    // Check if the command is to show the cart
-    if (command.contains("show cart")) {
-      _handleShowCartCommand();
-      return;
-    }
+      // Extract the item name
+      String itemName = match.group(2)?.toLowerCase() ?? '';
 
-    // Search for the item in the products list
-    products.forEach((productName, details) {
-      if (itemName.contains(productName)) {
-        _addToCart(productName, quantity); // Add the item with specified quantity
-        print("$productName added to cart via voice command with quantity: $quantity.");
-        itemFound = true;
+      // Check if the command is to show the cart
+      if (command.contains("show cart")) {
+        _handleShowCartCommand();
         return;
       }
-    });
 
-    if (!itemFound) {
-      // If no product matches the given name
-      print("Item not found in the product list.");
-      _speak("Item not available");
+      // Search for the item in the products list
+      products.forEach((productName, details) {
+        if (itemName.contains(productName)) {
+          _addToCart(
+              productName, quantity); // Add the item with specified quantity
+          print(
+              "$productName added to cart via voice command with quantity: $quantity.");
+          itemFound = true;
+          return;
+        }
+      });
+
+      if (!itemFound) {
+        // If no product matches the given name
+        print("Item not found in the product list.");
+        _speak("Item not available");
+      } else {
+        // Confirm the addition of the item(s) to the cart
+        _speak("$quantity item(s) added to cart.");
+      }
     } else {
-      // Confirm the addition of the item(s) to the cart
-      _speak("$quantity item(s) added to cart.");
+      // If the voice command does not match the expected format
+      _speak("Command not recognized. Please say 'get <quantity> <item>'");
     }
-  } else {
-    // If the voice command does not match the expected format
-    _speak("Command not recognized. Please say 'get <quantity> <item>'");
   }
-}
-
-
 
   Future<void> _handleShowCartCommand() async {
     if (cartItems.isEmpty) {
       await _speak("Your cart is empty");
       print("Cart is empty.");
-
-
     } else {
-
       // Clear the existing cart in the database
-    await _cartRef.remove();
-    print("Existing cart items cleared from the database.");
-
-
+      await _cartRef.remove();
+      print("Existing cart items cleared from the database.");
 
       for (var entry in cartItems.entries) {
         String itemName = entry.key;
         Map<String, dynamic> itemData = entry.value;
         String sanitizedKey = sanitizeKey(itemName);
 
-        print("Adding $itemName to the cart database with quantity ${itemData['quantity']}");
+        print(
+            "Adding $itemName to the cart database with quantity ${itemData['quantity']}");
 
         await _cartRef.child(sanitizedKey).set({
           'itemName': itemName,
@@ -199,8 +201,8 @@ void _processVoiceCommand(String command) {
     setState(() {
       if (cartItems.containsKey(itemName)) {
         cartItems[itemName]!['quantity'] += quantity;
-        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity']; // Recalculate totalPrice
-
+        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] *
+            cartItems[itemName]!['quantity']; // Recalculate totalPrice
       } else {
         cartItems[itemName] = {
           'price': price,
@@ -242,7 +244,9 @@ void _processVoiceCommand(String command) {
 
   Widget _buildItemList() {
     if (products.isEmpty) {
-      return const Center(child: CircularProgressIndicator()); // Show a loading indicator while fetching
+      return const Center(
+          child:
+              CircularProgressIndicator()); // Show a loading indicator while fetching
     }
 
     return ListView.builder(
@@ -268,7 +272,9 @@ void _processVoiceCommand(String command) {
   Future<void> _handleAddCommand(String command) async {
     print("Handling add command: $command");
 
-    final itemNameRegex = RegExp(r'get\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(.*)', caseSensitive: false);
+    final itemNameRegex = RegExp(
+        r'get\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(.*)',
+        caseSensitive: false);
     final match = itemNameRegex.firstMatch(command);
 
     if (match != null) {
@@ -285,7 +291,8 @@ void _processVoiceCommand(String command) {
         setState(() {
           if (cartItems.containsKey(itemName)) {
             cartItems[itemName]!['quantity'] += quantity;
-             cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity'];
+            cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] *
+                cartItems[itemName]!['quantity'];
           } else {
             cartItems[itemName] = {
               'price': price,
@@ -301,7 +308,7 @@ void _processVoiceCommand(String command) {
           'itemName': itemName,
           'quantity': cartItems[itemName]!['quantity'],
           'price': price,
-          'totalPrice': cartItems[itemName]!['totalPrice'] ,
+          'totalPrice': cartItems[itemName]!['totalPrice'],
         });
 
         print("Added $itemName to cart with quantity: $quantity");
