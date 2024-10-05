@@ -112,21 +112,21 @@ class _ShoppingPageState extends State<ShoppingPage> {
     print("Processing voice command: $command");
     bool itemFound = false;
 
-    // Check for "get <quantity> <itemName>" format, default to quantity 1 if not specified
-    RegExp commandPattern = RegExp(r'get\s*(\d+)?\s*(.*)',
-        caseSensitive: false); // Adjusted to 'get' format
+    command = command.trim(); // Trim the command for extra spaces
+    RegExp commandPattern = RegExp(r'^(get|add|put)\s*(\d+)?\s*(.*)',
+        caseSensitive: false); // Adjusted to include 'add' and 'put'
     int quantity = 1; // Default quantity is 1 if none provided
 
     final match = commandPattern.firstMatch(command);
 
     if (match != null) {
       // Extract the quantity if specified, else default to 1
-      if (match.group(1) != null) {
-        quantity = int.parse(match.group(1)!); // Use the captured quantity
+      if (match.group(2) != null) {
+        quantity = int.parse(match.group(2)!); // Use the captured quantity
       }
 
       // Extract the item name
-      String itemName = match.group(2)?.toLowerCase() ?? '';
+      String itemName = match.group(3)?.toLowerCase() ?? '';
 
       // Check if the command is to show the cart
       if (command.contains("show list")) {
@@ -137,7 +137,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
       // Search for the item in the products list
       products.forEach((productName, details) {
-        if (itemName.contains(productName)) {
+        if (itemName.contains(productName.toLowerCase())) {
+          // Compare in a case-insensitive way
           _addToCart(
               productName, quantity); // Add the item with specified quantity
           print(
