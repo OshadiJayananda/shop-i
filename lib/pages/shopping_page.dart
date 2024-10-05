@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
-import 'cart_page.dart'; // Import CartPage
+import 'cart_page.dart';
 
 class ShoppingPage extends StatefulWidget {
   const ShoppingPage({super.key});
@@ -129,7 +129,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
       String itemName = match.group(2)?.toLowerCase() ?? '';
 
       // Check if the command is to show the cart
-      if (command.contains("show cart")) {
+      if (command.contains("show list")) {
+        print('show list command included');
         _handleShowCartCommand();
         return;
       }
@@ -346,11 +347,39 @@ class _ShoppingPageState extends State<ShoppingPage> {
       appBar: AppBar(
         title: const Text('Shopping Page'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.shopping_cart),
-            onPressed: () {
-              _handleShowCartCommand(); // Directly show the cart page
-            },
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart),
+                onPressed: () async {
+                  await _handleShowCartCommand();
+                },
+              ),
+              if (_cartItemCount > 0)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2.0),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16.0,
+                      minHeight: 16.0,
+                    ),
+                    child: Text(
+                      '$_cartItemCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.0,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           if (_isListening)
             IconButton(
