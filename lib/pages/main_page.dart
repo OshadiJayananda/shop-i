@@ -17,6 +17,7 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   final List<Widget> pages = [
     const HomePage(),
+    const Voicepage(),
     const ShoppingPage(),
     const BarcodeScanner(),
     // Ensure BarcodeScanner is listed here

@@ -1,11 +1,12 @@
-// import 'dart:convert';
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:demo_app/consts.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart'; // Import Firebase Realtime Database
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_tts/flutter_tts.dart';
+import 'package:demo_app/consts.dart';
 
 class CameraPage extends StatefulWidget {
   const CameraPage({super.key});
@@ -21,6 +22,30 @@ class _CameraPageState extends State<CameraPage> {
   bool _isCapturing = false;
   bool isImageCaptured = false;
   bool _isLoading = false;
+  late FlutterTts flutterTts; // TTS instance
+
+  // Firebase database references
+  final DatabaseReference shoppingListRef =
+      FirebaseDatabase.instance.ref().child('shopping_lists');
+  final DatabaseReference promotionsRef =
+      FirebaseDatabase.instance.ref().child('promotions');
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeCamera();
+    _initializeTts();
+  }
+
+  void _initializeTts() {
+    flutterTts = FlutterTts();
+  }
+
+  Future<void> _speakText(String text) async {
+    await flutterTts.setLanguage("en-US");
+    await flutterTts.setPitch(1.0);
+    await flutterTts.speak(text);
+  }
 
   void _retakePicture() {
     setState(() {
@@ -48,6 +73,36 @@ class _CameraPageState extends State<CameraPage> {
         );
       },
     );
+  }
+
+  // Function to fetch the shopping list from Firebase and check if item exists
+  Future<bool> checkItemInShoppingList(String itemName) async {
+    final snapshot = await shoppingListRef.get();
+    if (snapshot.exists) {
+      Map<dynamic, dynamic> shoppingList = snapshot.value as Map<dynamic, dynamic>;
+
+      // Check if the item name is in the shopping list
+      bool itemFound = shoppingList.containsValue(itemName.toLowerCase());
+      return itemFound;
+    }
+    return false;
+  }
+
+  // Function to check if the item is in the promotions database
+  Future<String?> checkPromotionsForItem(String itemName) async {
+    final snapshot = await promotionsRef.get(); // Fetch the promotions from Firebase
+    if (snapshot.exists) {
+      Map<dynamic, dynamic> promotions = snapshot.value as Map<dynamic, dynamic>;
+
+      for (var entry in promotions.entries) {
+        Map<dynamic, dynamic> promotionData = entry.value as Map<dynamic, dynamic>;
+        if (promotionData['item'].toLowerCase() == itemName.toLowerCase()) {
+          // Return formatted promotion string
+          return "There is an ongoing ${promotionData['promotion']} promotion for ${promotionData['item']} from ${promotionData['brand']} until ${promotionData['duration']}.";
+        }
+      }
+    }
+    return null; // No promotion found
   }
 
   Future<void> extractBrand(String scannedText, BuildContext context) async {
@@ -82,16 +137,41 @@ class _CameraPageState extends State<CameraPage> {
       final response = await chat.sendMessage(content);
 
       if (response != null && response.text!.isNotEmpty) {
-        String matchedBrand = response.text!.trim();
+        String matchedBrand = response.text!.trim().toLowerCase();
+
+        // Now check if the extracted item is in the Firebase shopping list
+        bool isItemInShoppingList = await checkItemInShoppingList(matchedBrand);
+
+        // Check if there is any promotion for this item
+        String? promotionDetails = await checkPromotionsForItem(matchedBrand);
+
+        // Append message based on Firebase check result
+        String shoppingListMessage = isItemInShoppingList
+            ? "This item is on your shopping list."
+            : "This item is not on your shopping list.";
+
+        // If promotion is found, append the promotion details, otherwise show no promotion message
+        String promotionMessage = promotionDetails != null
+            ? promotionDetails
+            : "There are no ongoing promotions for $matchedBrand.";
 
         const $title = "Brand Matched";
-        final $content = "Matching result: $matchedBrand";
+        final $content =
+            "Matching result: $matchedBrand\n$shoppingListMessage\n$promotionMessage";
+
         showCustomDialog(context, $title, $content);
+
+        // Speak the matched text along with shopping list and promotion status
+        _speakText(
+            "Matching result: $matchedBrand. $shoppingListMessage. $promotionMessage");
       } else {
         const $title = "No Match Found";
         const $content =
             "Could not match any brand or product from the scanned text.";
         showCustomDialog(context, $title, $content);
+
+        // Speak the "no match" result
+        _speakText("Could not match any brand or product.");
       }
     } catch (error) {
       print('Error occurred: $error');
@@ -117,7 +197,6 @@ class _CameraPageState extends State<CameraPage> {
         }
         const $title = 'Scanned Text';
         final $content = text;
-        // showCustomDialog(context, $title, $content);
         extractBrand(text, context);
         textRecognizer.close();
       } catch (e) {
@@ -125,14 +204,9 @@ class _CameraPageState extends State<CameraPage> {
         const $title = 'Error';
         final $content = 'Error analyzing image: $e';
         showCustomDialog(context, $title, $content);
+        _speakText('Error analyzing image');
       }
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeCamera();
   }
 
   Future<void> _initializeCamera() async {
@@ -154,6 +228,7 @@ class _CameraPageState extends State<CameraPage> {
   @override
   void dispose() {
     _controller.dispose();
+    flutterTts.stop(); // Stop any speech on dispose
     super.dispose();
   }
 
@@ -217,25 +292,26 @@ class _CameraPageState extends State<CameraPage> {
               const SizedBox(height: 10),
               isImageCaptured
                   ? ElevatedButton(
-                      onPressed: () {
-                        _analyzeImage(context);
-                      },
-                      child: const Text('Analyze Image'),
-                    )
+                      onPressed: () => _analyzeImage(context),
+                      child: const Text('Analyze Image'))
                   : ElevatedButton(
                       onPressed: _takePicture,
-                      child: const Text('Capture Image'),
+                      child: _isCapturing
+                          ? const CircularProgressIndicator(
+                              color: Colors.white,
+                            )
+                          : const Text('Capture Image'),
                     ),
-              const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: _retakePicture,
-                child: const Text('Retake Image'),
-              ),
+              if (isImageCaptured)
+                ElevatedButton(
+                  onPressed: _retakePicture,
+                  child: const Text('Retake'),
+                ),
             ],
           ),
           if (_isLoading)
             Container(
-              color: Colors.black54,
+              color: Colors.black.withOpacity(0.5),
               child: const Center(
                 child: CircularProgressIndicator(),
               ),
