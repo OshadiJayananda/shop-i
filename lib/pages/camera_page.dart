@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart'; // Import Firebase Realtime Database
@@ -76,26 +77,37 @@ class _CameraPageState extends State<CameraPage> {
   }
 
   // Function to fetch the shopping list from Firebase and check if item exists
-  Future<bool> checkItemInShoppingList(String itemName) async {
+  Future<String?> checkItemInShoppingList(String itemName) async {
     final snapshot = await shoppingListRef.get();
     if (snapshot.exists) {
-      Map<dynamic, dynamic> shoppingList = snapshot.value as Map<dynamic, dynamic>;
+      Map<dynamic, dynamic> shoppingList =
+          snapshot.value as Map<dynamic, dynamic>;
 
       // Check if the item name is in the shopping list
-      bool itemFound = shoppingList.containsValue(itemName.toLowerCase());
-      return itemFound;
+      // string itemFound = shoppingList.containsValue(itemName.toLowerCase());
+      // return itemFound;
+      for (var entry in shoppingList.entries) {
+        Map<dynamic, dynamic> itemFound = entry.value as Map<dynamic, dynamic>;
+        if (itemFound['item'].toLowerCase() == itemName.toLowerCase()) {
+          // Return formatted promotion string
+          return "This ${itemFound['item']} item is on the shopping list.";
+        }
+      }
     }
-    return false;
+    return null;
   }
 
   // Function to check if the item is in the promotions database
   Future<String?> checkPromotionsForItem(String itemName) async {
-    final snapshot = await promotionsRef.get(); // Fetch the promotions from Firebase
+    final snapshot =
+        await promotionsRef.get(); // Fetch the promotions from Firebase
     if (snapshot.exists) {
-      Map<dynamic, dynamic> promotions = snapshot.value as Map<dynamic, dynamic>;
+      Map<dynamic, dynamic> promotions =
+          snapshot.value as Map<dynamic, dynamic>;
 
       for (var entry in promotions.entries) {
-        Map<dynamic, dynamic> promotionData = entry.value as Map<dynamic, dynamic>;
+        Map<dynamic, dynamic> promotionData =
+            entry.value as Map<dynamic, dynamic>;
         if (promotionData['item'].toLowerCase() == itemName.toLowerCase()) {
           // Return formatted promotion string
           return "There is an ongoing ${promotionData['promotion']} promotion for ${promotionData['item']} from ${promotionData['brand']} until ${promotionData['duration']}.";
@@ -136,34 +148,63 @@ class _CameraPageState extends State<CameraPage> {
       final content = Content.text(inputMessage);
       final response = await chat.sendMessage(content);
 
-      if (response != null && response.text!.isNotEmpty) {
-        String matchedBrand = response.text!.trim().toLowerCase();
+      if (response.text!.isNotEmpty) {
+        String productDetail = response.text!.trim().toLowerCase();
+        final responseText = response.text!.trim();
 
-        // Now check if the extracted item is in the Firebase shopping list
-        bool isItemInShoppingList = await checkItemInShoppingList(matchedBrand);
+        // Assuming the response text is in JSON format
+        final Map<String, dynamic> jsonResponse = jsonDecode(responseText);
 
-        // Check if there is any promotion for this item
-        String? promotionDetails = await checkPromotionsForItem(matchedBrand);
+        String? productName;
+        if (jsonResponse.containsKey('product_name')) {
+          productName = jsonResponse['product_name'];
+          print('Product Name: $productName');
+        } else {
+          print('Product name not found in response.');
+        }
 
-        // Append message based on Firebase check result
-        String shoppingListMessage = isItemInShoppingList
-            ? "This item is on your shopping list."
-            : "This item is not on your shopping list.";
+        if (productName != null) {
+          // Now check if the extracted item is in the Firebase shopping list
+          String? ItemInShoppingList =
+              await checkItemInShoppingList(productName);
 
-        // If promotion is found, append the promotion details, otherwise show no promotion message
-        String promotionMessage = promotionDetails != null
-            ? promotionDetails
-            : "There are no ongoing promotions for $matchedBrand.";
+          bool isItemInShoppingList = false;
 
-        const $title = "Brand Matched";
-        final $content =
-            "Matching result: $matchedBrand\n$shoppingListMessage\n$promotionMessage";
+          if (ItemInShoppingList != null) {
+            isItemInShoppingList = true;
+          }
+          // Check if there is any promotion for this item
+          String? promotionDetails = await checkPromotionsForItem(productName);
 
-        showCustomDialog(context, $title, $content);
+          // Append message based on Firebase check result
+          String shoppingListMessage = isItemInShoppingList
+              ? "This item is on your shopping list."
+              : "This item is not on your shopping list.";
 
-        // Speak the matched text along with shopping list and promotion status
-        _speakText(
-            "Matching result: $matchedBrand. $shoppingListMessage. $promotionMessage");
+          // If promotion is found, append the promotion details, otherwise show no promotion message
+          String promotionMessage = promotionDetails != null
+              ? promotionDetails
+              : "There are no ongoing promotions for $productDetail.";
+
+          const $title = "Brand Matched";
+          final $content =
+              "Matching result: $productDetail\n$shoppingListMessage\n$promotionMessage";
+
+          showCustomDialog(context, $title, $content);
+
+          // Speak the matched text along with shopping list and promotion status
+          _speakText(
+              "Matching result: $productDetail. $shoppingListMessage. $promotionMessage");
+        } else {
+          // Handle case where no product name is found
+          const $title = "No Match Found";
+          const $content =
+              "Could not match any brand or product from the scanned text.";
+          showCustomDialog(context, $title, $content);
+
+          // Speak the "no match" result
+          _speakText("Could not match any brand or product.");
+        }
       } else {
         const $title = "No Match Found";
         const $content =
@@ -262,6 +303,7 @@ class _CameraPageState extends State<CameraPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.red,
         title: const Text('Camera'),
       ),
       body: Stack(

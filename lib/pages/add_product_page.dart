@@ -81,7 +81,7 @@ class _AddProductPageState extends State<AddProductPage> {
     return '${productName.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '_')}_${brand.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '_')}';
   }
 
-  /* 
+  
   // Dummy data for products
   final List<Map<String, dynamic>> products = [
     {
@@ -507,7 +507,18 @@ class _AddProductPageState extends State<AddProductPage> {
       "Price": 119.99,
       "Stock": 70,
       "Location": "Aisle 1, Shelf 3"
+    },
+    {
+      "Product Name": "tifin original",
+      "Description":
+          "A little different",
+      "Category": "Biscuit",
+      "Brand": "Munchee",
+      "Price": 195.00,
+      "Stock": 150,
+      "Location": "Aisle 2, Shelf 3"
     }
+
   ];
 
   Future<void> uploadProducts() async {
@@ -531,7 +542,7 @@ class _AddProductPageState extends State<AddProductPage> {
     }
   }
   //End of dummy data
-  */
+  
   Future<void> _submitForm() async {
     //upload dummy data comment below validation before uploading dummy
     // uploadProducts();
@@ -572,13 +583,13 @@ class _AddProductPageState extends State<AddProductPage> {
           context: context,
           builder: (BuildContext context) {
             return AlertDialog(
-              title: Text('Added to Database'),
+              title: const Text('Added to Database'),
               content: SingleChildScrollView(
                 child: Text('Product $uniqueKey added successfully!'),
               ),
               actions: <Widget>[
                 TextButton(
-                  child: Text('OK'),
+                  child: const Text('OK'),
                   onPressed: () {
                     Navigator.of(context).pop();
                   },

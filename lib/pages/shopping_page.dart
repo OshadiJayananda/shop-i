@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
-import 'cart_page.dart'; // Import CartPage
+import 'cart_page.dart';
 
 class ShoppingPage extends StatefulWidget {
   const ShoppingPage({super.key});
@@ -12,8 +12,10 @@ class ShoppingPage extends StatefulWidget {
 }
 
 class _ShoppingPageState extends State<ShoppingPage> {
-  final DatabaseReference _productRef = FirebaseDatabase.instance.ref().child('products');
-  final DatabaseReference _cartRef = FirebaseDatabase.instance.ref().child('cart');
+  final DatabaseReference _productRef =
+      FirebaseDatabase.instance.ref().child('products');
+  final DatabaseReference _cartRef =
+      FirebaseDatabase.instance.ref().child('cart');
   late stt.SpeechToText _speech;
   late FlutterTts _flutterTts;
 
@@ -52,7 +54,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
       data.forEach((key, value) {
         final itemData = Map<String, dynamic>.from(value);
         final itemName = itemData['Product Name'] as String?;
-        final price = itemData['Price'] != null ? double.tryParse(itemData['Price'].toString()) : 0.0;
+        final price = itemData['Price'] != null
+            ? double.tryParse(itemData['Price'].toString())
+            : 0.0;
 
         if (itemName != null) {
           fetchedProducts[itemName.toLowerCase()] = {'Price': price};
@@ -70,7 +74,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
   }
 
   void _updateCartCount() {
-    int count = cartItems.values.fold(0, (prev, item) => prev + (item['quantity'] as int));
+    int count = cartItems.values
+        .fold(0, (prev, item) => prev + (item['quantity'] as int));
     setState(() {
       _cartItemCount = count;
     });
@@ -107,34 +112,47 @@ class _ShoppingPageState extends State<ShoppingPage> {
     print("Processing voice command: $command");
     bool itemFound = false;
 
-    // Check for quantity in voice command, default to 1
-    RegExp quantityPattern = RegExp(r'(\d+)\s+');
-    int quantity = 1;
-    if (quantityPattern.hasMatch(command)) {
-      quantity = int.tryParse(quantityPattern.firstMatch(command)!.group(1)!) ?? 1;
-    }
+    command = command.trim(); // Trim the command for extra spaces
 
-    if (command.contains("show cart")) {
+    if (command.contains("show list")) {
+      print('show list command included');
       _handleShowCartCommand();
       return;
     }
 
-    // Iterate over product list to match the command with item names
-    products.forEach((itemName, details) {
-      print("Checking if command contains product: $itemName");
-      if (command.contains(itemName)) {
-        _addToCart(itemName, quantity);
-        print("$itemName added to cart via voice command with quantity: $quantity.");
-        itemFound = true;
-        return;
-      }
-    });
+    RegExp commandPattern = RegExp(r'^(get|add|put)\s*(\d+)?\s*(.*)',
+        caseSensitive: false); // Adjusted to include 'add' and 'put'
+    int quantity = 1; // Default quantity is 1 if none provided
 
-    if (!itemFound) {
-      print("Item not found in the product list.");
-      _speak("Item not available");
+    final match = commandPattern.firstMatch(command);
+
+    if (match != null) {
+      if (match.group(2) != null) {
+        quantity = int.parse(match.group(2)!); // Use the captured quantity
+        print("Quantity parsed: $quantity"); // Debugging print
+      }
+
+      String itemName = match.group(3)?.toLowerCase() ?? '';
+
+      // Search for the item in the products list
+      products.forEach((productName, details) {
+        if (itemName.contains(productName.toLowerCase())) {
+          _addToCart(productName, quantity); // Pass the correct quantity
+          print(
+              "$productName added to cart via voice command with quantity: $quantity.");
+          itemFound = true;
+          return;
+        }
+      });
+
+      if (!itemFound) {
+        print("Item not found in the product list.");
+        _speak("Item not available");
+      } else {
+        _speak("$quantity item(s) added to cart.");
+      }
     } else {
-      _speak("$quantity item(s) added to cart.");
+      _speak("Command not recognized. Please say 'get <quantity> <item>'");
     }
   }
 
@@ -142,22 +160,18 @@ class _ShoppingPageState extends State<ShoppingPage> {
     if (cartItems.isEmpty) {
       await _speak("Your cart is empty");
       print("Cart is empty.");
-
-
     } else {
-
       // Clear the existing cart in the database
-    await _cartRef.remove();
-    print("Existing cart items cleared from the database.");
-
-
+      await _cartRef.remove();
+      print("Existing cart items cleared from the database.");
 
       for (var entry in cartItems.entries) {
         String itemName = entry.key;
         Map<String, dynamic> itemData = entry.value;
         String sanitizedKey = sanitizeKey(itemName);
 
-        print("Adding $itemName to the cart database with quantity ${itemData['quantity']}");
+        print(
+            "Adding $itemName to the cart database with quantity ${itemData['quantity']}");
 
         await _cartRef.child(sanitizedKey).set({
           'itemName': itemName,
@@ -183,8 +197,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
     setState(() {
       if (cartItems.containsKey(itemName)) {
         cartItems[itemName]!['quantity'] += quantity;
-        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity']; // Recalculate totalPrice
-
+        cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] *
+            cartItems[itemName]!['quantity']; // Recalculate totalPrice
       } else {
         cartItems[itemName] = {
           'price': price,
@@ -226,7 +240,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
 
   Widget _buildItemList() {
     if (products.isEmpty) {
-      return const Center(child: CircularProgressIndicator()); // Show a loading indicator while fetching
+      return const Center(
+          child:
+              CircularProgressIndicator()); // Show a loading indicator while fetching
     }
 
     return ListView.builder(
@@ -252,7 +268,9 @@ class _ShoppingPageState extends State<ShoppingPage> {
   Future<void> _handleAddCommand(String command) async {
     print("Handling add command: $command");
 
-    final itemNameRegex = RegExp(r'get\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(.*)', caseSensitive: false);
+    final itemNameRegex = RegExp(
+        r'get\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)?\s*(.*)',
+        caseSensitive: false);
     final match = itemNameRegex.firstMatch(command);
 
     if (match != null) {
@@ -269,7 +287,8 @@ class _ShoppingPageState extends State<ShoppingPage> {
         setState(() {
           if (cartItems.containsKey(itemName)) {
             cartItems[itemName]!['quantity'] += quantity;
-             cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] * cartItems[itemName]!['quantity'];
+            cartItems[itemName]!['totalPrice'] = cartItems[itemName]!['price'] *
+                cartItems[itemName]!['quantity'];
           } else {
             cartItems[itemName] = {
               'price': price,
@@ -285,7 +304,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
           'itemName': itemName,
           'quantity': cartItems[itemName]!['quantity'],
           'price': price,
-          'totalPrice': cartItems[itemName]!['totalPrice'] ,
+          'totalPrice': cartItems[itemName]!['totalPrice'],
         });
 
         print("Added $itemName to cart with quantity: $quantity");
@@ -321,13 +340,42 @@ class _ShoppingPageState extends State<ShoppingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.red,
         title: const Text('Shopping Page'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.shopping_cart),
-            onPressed: () {
-              _handleShowCartCommand(); // Directly show the cart page
-            },
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.shopping_cart),
+                onPressed: () async {
+                  await _handleShowCartCommand();
+                },
+              ),
+              if (_cartItemCount > 0)
+                Positioned(
+                  right: 0,
+                  top: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(2.0),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16.0,
+                      minHeight: 16.0,
+                    ),
+                    child: Text(
+                      '$_cartItemCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.0,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           if (_isListening)
             IconButton(

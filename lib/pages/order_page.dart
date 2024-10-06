@@ -146,15 +146,19 @@ void _doPayment() {
   if (paymentMethod == 'Cash') {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => CashPage(totalAmount: totalAmount)), // Pass the totalAmount here
+      MaterialPageRoute(builder: (context) => CashPage(totalAmount: totalAmount)),
     );
+  } else if (paymentMethod == 'Card') {
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(builder: (context) => CardPage(totalAmount: totalAmount)),
+    // );
   } else {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text('Payment of \$${totalAmount.toStringAsFixed(2)} via $paymentMethod'),
+      content: Text('Please select a payment method.'),
     ));
   }
 }
-
 
   @override
   Widget build(BuildContext context) {

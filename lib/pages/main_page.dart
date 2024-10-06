@@ -1,9 +1,6 @@
-import 'package:demo_app/pages/home_page.dart';
-import 'package:demo_app/pages/profile_page.dart';
-import 'package:demo_app/pages/settings_page.dart';
 import 'package:demo_app/pages/shopping_page.dart';
 import 'package:demo_app/pages/shopping_list.dart';
-import 'package:demo_app/pages/Barcode_scanner.dart'; // Import the BarcodeScanner page
+import 'package:demo_app/pages/Barcode_scanner.dart';
 import 'package:demo_app/pages/camera_page.dart';
 import 'package:flutter/material.dart';
 
@@ -16,14 +13,10 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> {
   final List<Widget> pages = [
-    const HomePage(),
     const Voicepage(),
-    const ShoppingPage(),
-    const BarcodeScanner(),
-    // Ensure BarcodeScanner is listed here
     const CameraPage(),
-    const ProfilePage(),
-    const SettingsPage(),
+    const BarcodeScanner(),
+    const ShoppingPage(),
   ];
 
   int currentPage = 0;
@@ -44,31 +37,21 @@ class _MainPageState extends State<MainPage> {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(
-              Icons.home,
+              Icons.list,
             ),
-            label: "Home",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.shop),
-            label: "Shopping",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.qr_code_scanner),
-            label: "Barcode Scanner",
+            label: "list",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.camera),
             label: "Camera",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Profile",
+            icon: Icon(Icons.qr_code_scanner),
+            label: "Barcode Scanner",
           ),
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.settings,
-            ),
-            label: "Settings",
+            icon: Icon(Icons.shop),
+            label: "Shopping",
           ),
         ],
       ),

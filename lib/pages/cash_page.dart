@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'shopping_page.dart';
 
 class CashPage extends StatefulWidget {
   final double totalAmount; // Accept totalAmount as a parameter
@@ -29,7 +30,17 @@ class _CashPageState extends State<CashPage> {
   Future<void> _speakReceipt() async {
     await _flutterTts.setLanguage('en-US');
     await _flutterTts.setPitch(1.0);
-    await _flutterTts.speak("Your total amount is \$${widget.totalAmount.toStringAsFixed(2)}. Your payment is successful. Have a nice day! Come again!");
+    await _flutterTts.speak(
+      "Your total amount is \$${widget.totalAmount.toStringAsFixed(2)}. Your payment is successful. Have a nice day! Come again!"
+    );
+
+    // Wait for 2 seconds after speech completion
+    await Future.delayed(const Duration(seconds: 4));
+
+    // Navigate to the shopping page (replace ShoppingPage() with your actual shopping page widget)
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (context) => const ShoppingPage()),
+    );
   }
 
   @override
@@ -42,16 +53,16 @@ class _CashPageState extends State<CashPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
+            const Text(
               "Receipt",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Text(
               "Total Amount: \$${widget.totalAmount.toStringAsFixed(2)}",
-              style: TextStyle(fontSize: 20),
+              style: const TextStyle(fontSize: 20),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             const Text(
               "Thank you for your payment!",
               style: TextStyle(fontSize: 18),
