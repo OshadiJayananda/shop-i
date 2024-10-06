@@ -113,6 +113,13 @@ class _ShoppingPageState extends State<ShoppingPage> {
     bool itemFound = false;
 
     command = command.trim(); // Trim the command for extra spaces
+
+    if (command.contains("show list")) {
+      print('show list command included');
+      _handleShowCartCommand();
+      return;
+    }
+
     RegExp commandPattern = RegExp(r'^(get|add|put)\s*(\d+)?\s*(.*)',
         caseSensitive: false); // Adjusted to include 'add' and 'put'
     int quantity = 1; // Default quantity is 1 if none provided
@@ -120,27 +127,17 @@ class _ShoppingPageState extends State<ShoppingPage> {
     final match = commandPattern.firstMatch(command);
 
     if (match != null) {
-      // Extract the quantity if specified, else default to 1
       if (match.group(2) != null) {
         quantity = int.parse(match.group(2)!); // Use the captured quantity
+        print("Quantity parsed: $quantity"); // Debugging print
       }
 
-      // Extract the item name
       String itemName = match.group(3)?.toLowerCase() ?? '';
-
-      // Check if the command is to show the cart
-      if (command.contains("show list")) {
-        print('show list command included');
-        _handleShowCartCommand();
-        return;
-      }
 
       // Search for the item in the products list
       products.forEach((productName, details) {
         if (itemName.contains(productName.toLowerCase())) {
-          // Compare in a case-insensitive way
-          _addToCart(
-              productName, quantity); // Add the item with specified quantity
+          _addToCart(productName, quantity); // Pass the correct quantity
           print(
               "$productName added to cart via voice command with quantity: $quantity.");
           itemFound = true;
@@ -149,15 +146,12 @@ class _ShoppingPageState extends State<ShoppingPage> {
       });
 
       if (!itemFound) {
-        // If no product matches the given name
         print("Item not found in the product list.");
         _speak("Item not available");
       } else {
-        // Confirm the addition of the item(s) to the cart
         _speak("$quantity item(s) added to cart.");
       }
     } else {
-      // If the voice command does not match the expected format
       _speak("Command not recognized. Please say 'get <quantity> <item>'");
     }
   }
@@ -346,6 +340,7 @@ class _ShoppingPageState extends State<ShoppingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.red,
         title: const Text('Shopping Page'),
         actions: [
           Stack(

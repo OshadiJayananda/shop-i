@@ -4,7 +4,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:firebase_database/firebase_database.dart';
 
 class BarcodeScanner extends StatefulWidget {
-  const BarcodeScanner({super.key});
+  const BarcodeScanner({Key? key}) : super(key: key);
 
   @override
   _BarcodeScannerState createState() => _BarcodeScannerState();
@@ -14,13 +14,15 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
   MobileScannerController cameraController = MobileScannerController();
   FlutterTts flutterTts = FlutterTts();
   final DatabaseReference _databaseReference =
-  FirebaseDatabase.instance.ref().child('products');
+      FirebaseDatabase.instance.ref().child('products'); // Firebase node
 
+  TextEditingController _searchController = TextEditingController();
   bool isScanning = false;
 
   @override
   void dispose() {
     cameraController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -32,25 +34,25 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
     final DataSnapshot snapshot = await _databaseReference.child(barcode).get();
     if (snapshot.exists) {
       final productDetails = snapshot.value as Map<dynamic, dynamic>;
-      String productName = productDetails['name'] ?? 'Unknown product';
-      String productPrice = productDetails['price'] ?? 'Unknown price';
-      String expirationDate =
-          productDetails['expirationDate'] ?? 'No expiration date';
+      String brand = productDetails['Brand'] ?? 'Unknown brand';
+      String productName =
+          productDetails['Product Name'] ?? 'Unknown product name';
+      String price = productDetails['Price'].toString() ?? 'Unknown price';
 
       String message =
-          "Product name: $productName. Price: $productPrice. Expiration date: $expirationDate.";
+          "Brand: $brand. Product Name: $productName. Price: $price.";
 
       _readOutLoud(message);
 
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text("Product Details"),
+          title: Text("Product Details"),
           content: Text(message),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("OK"),
+              child: Text("OK"),
             ),
           ],
         ),
@@ -60,10 +62,18 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
     }
   }
 
+  void _searchProduct() {
+    String searchQuery = _searchController.text.trim();
+    if (searchQuery.isNotEmpty) {
+      _fetchProductDetails(searchQuery);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.red,
         title: const Text('Barcode Scanner'),
         actions: [
           IconButton(
@@ -80,21 +90,48 @@ class _BarcodeScannerState extends State<BarcodeScanner> {
           ),
         ],
       ),
-      body: MobileScanner(
-        controller: cameraController,
-        onDetect: (capture) {
-          if (!isScanning) {
-            isScanning = true;
-            final barcode = capture.barcodes.first.rawValue;
-            if (barcode != null) {
-              _fetchProductDetails(barcode).then((_) {
-                setState(() {
-                  isScanning = false;
-                });
-              });
-            }
-          }
-        },
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Search by barcode',
+                border: OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.search),
+                  onPressed: _searchProduct,
+                ),
+              ),
+              onSubmitted: (value) {
+                _searchProduct();
+              },
+            ),
+          ),
+          Expanded(
+            child: MobileScanner(
+              controller: cameraController,
+              onDetect: (capture) {
+                if (!isScanning) {
+                  isScanning = true;
+                  final barcode = capture.barcodes.first.rawValue;
+                  if (barcode != null) {
+                    setState(() {
+                      _searchController.text =
+                          barcode; // Set scanned barcode in search bar
+                    });
+                    _fetchProductDetails(barcode).then((_) {
+                      setState(() {
+                        isScanning = false;
+                      });
+                    });
+                  }
+                }
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
