@@ -15,6 +15,9 @@ class CartPage extends StatefulWidget {
 class _CartPageState extends State<CartPage> {
   final DatabaseReference _cartRef =
       FirebaseDatabase.instance.ref().child('cart');
+  final DatabaseReference _promotionsRef =
+      FirebaseDatabase.instance.ref().child('promotions');
+  Map<String, double> discounts = {};
   Map<String, Map<String, dynamic>> cartItems = {};
   late stt.SpeechToText _speechToText;
   bool _isListening = false;
@@ -25,6 +28,7 @@ class _CartPageState extends State<CartPage> {
     super.initState();
     cartItems = widget.cartItems;
     _setupCartListener();
+    _setupDiscountListener();
     _speechToText = stt.SpeechToText();
   }
 
@@ -53,11 +57,45 @@ class _CartPageState extends State<CartPage> {
     });
   }
 
-  // Total price calculator
+  // Firebase listener to get discounts from the promotions database
+  void _setupDiscountListener() {
+    _promotionsRef.onValue.listen((event) {
+      if (event.snapshot.value != null) {
+        final dynamic data = event.snapshot.value;
+        final updatedDiscounts = <String, double>{};
+
+        if (data is Map) {
+          data.forEach((key, value) {
+            final promotionData = Map<String, dynamic>.from(value);
+            if (promotionData.containsKey('discount')) {
+              final discount =
+                  (promotionData['discount'] as num?)?.toDouble() ?? 0.0;
+              updatedDiscounts[key] = discount;
+            }
+          });
+        }
+
+        setState(() {
+          discounts = updatedDiscounts;
+        });
+      }
+    });
+  }
+
+  // Total price calculator with discount applied
   double _calculateTotalPrice() {
-    return cartItems.values.fold(0.0, (sum, item) {
-      final double totalPrice = (item['totalPrice'] as num?)?.toDouble() ?? 0.0;
-      return sum + totalPrice;
+    return cartItems.entries.fold(0.0, (sum, entry) {
+      final itemName = entry.key;
+      final item = entry.value;
+      final quantity = (item['quantity'] as int?) ?? 1;
+      final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+      final totalPrice = price * quantity;
+
+      // Apply discount if available
+      final double discount = discounts[itemName] ?? 0.0;
+      final double discountedPrice = totalPrice * (1 - discount / 100);
+
+      return sum + discountedPrice;
     });
   }
 
@@ -199,11 +237,16 @@ class _CartPageState extends State<CartPage> {
     final double totalPrice =
         (item['totalPrice'] as num?)?.toDouble() ?? (price * quantity);
 
+    // Calculate the discount if available
+    final double discount = discounts[itemName] ?? 10.0;
+    final double discountedPrice = totalPrice * (1 - discount / 100);
+
     return DataRow(cells: [
       DataCell(Text(itemName)),
       DataCell(Text(quantity.toString())),
       DataCell(Text('\$${price.toStringAsFixed(2)}')),
-      DataCell(Text('\$${totalPrice.toStringAsFixed(2)}')),
+      DataCell(Text('\$${discountedPrice.toStringAsFixed(2)}')),
+      DataCell(Text('${discount.toStringAsFixed(2)}%')), // New discount column
       DataCell(
         IconButton(
           icon: const Icon(Icons.delete, color: Colors.red),
@@ -248,6 +291,7 @@ class _CartPageState extends State<CartPage> {
                               DataColumn(label: Text('Quantity')),
                               DataColumn(label: Text('Price')),
                               DataColumn(label: Text('Total')),
+                              DataColumn(label: Text('Discount')),
                               DataColumn(label: Text('Actions')),
                             ],
                             rows: cartItems.entries.map((entry) {
